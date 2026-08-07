@@ -1,0 +1,41 @@
+{
+    "policyId": "default:basic_policy",
+    "entries": {
+        "DEFAULT": {
+            "subjects": {
+                {{ printf "\"{{ request:subjectId }}\"" }}: {
+                    "type": "Ditto user authenticated via nginx"
+                },
+                "pre-authenticated:kafkaml-connection": {
+                    "type": "Connection to KafkaML"
+                },
+                "pre-authenticated:hono-connection": {
+                    "type": "Connection to Eclipse Hono"
+                }
+            },
+            "resources": {
+                "policy:/": {
+                    "grant": [
+                        "READ",
+                        "WRITE"
+                    ],
+                    "revoke": []
+                },
+                "thing:/": {
+                    "grant": [
+                        "READ",
+                        "WRITE"
+                    ],
+                    "revoke": []
+                },
+                "message:/": {
+                    "grant": [
+                        "READ",
+                        "WRITE"
+                    ],
+                    "revoke": []
+                }
+            }
+        }
+    }
+}

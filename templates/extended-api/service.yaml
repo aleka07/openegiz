@@ -1,0 +1,20 @@
+{{- if and .Values.extendedAPI.enabled (or ((.Values.extendedAPI.ditto).uri) .Values.ditto.enabled) }}
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-ditto-extended-api
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}-ditto-extended-api
+spec:
+  type: NodePort
+  ports:
+  - name: http
+    nodePort: {{ .Values.extendedAPI.service.nodePort }}
+    port: {{ .Values.extendedAPI.service.port }}
+    protocol: TCP
+    targetPort: {{ .Values.extendedAPI.service.port }}
+  selector:
+    app.kubernetes.io/name: {{ .Release.Name }}-ditto-extended-api
+
+{{- end }}

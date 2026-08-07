@@ -1,0 +1,26 @@
+{{- if and .Values.kafkaml.enabled }}
+
+{{- range $name, $config := .Values.kafkaml.services }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kafkaml.fullname" (dict "Release" $.Release "Component" $name) }}
+  labels:
+    {{- include "kafkaml.labels" $ | nindent 4 }}
+    component: {{ $name }}
+spec:
+  type: {{ $config.type }}
+  ports:
+  - port: {{ $config.port }}
+    targetPort: {{ $config.port }}
+    protocol: TCP
+    {{- if and (eq $config.type "NodePort") $config.nodePort }}
+    nodePort: {{ $config.nodePort }}
+    {{- end }}
+  selector:
+    app: {{ $name }}
+    release: {{ $.Release.Name }}
+---
+{{- end }}
+
+{{- end }}

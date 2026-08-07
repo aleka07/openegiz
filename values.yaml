@@ -1,0 +1,436 @@
+####################################################################################################################################
+# OpenEgiz helm chart
+# Based on OpenTwins by Julia Robles, Sergio Infante, Altair Bueno
+# For local testing: helm install openegiz ./ --wait --timeout=15m --dependency-update --debug
+####################################################################################################################################
+
+
+
+# Example digital twin
+##################################################################
+example:
+  enabled: false
+
+
+# Persistent volumes
+# Enabling these persistent volumes or not will depend on how your Kubernetes cluster works. 
+# In our case, the cluster creates them automatically, so we don't need to activate them. 
+# In other clusters we have seen that they are not created automatically, so to enable persistence it will be necessary to activate them.
+##################################################################
+persistentVolumes:
+  grafana: false
+  hono: false
+  influxdb2: false
+
+
+
+# OpenTwins connections
+# Components can be automatically connected during installation.
+##################################################################
+connections:
+  ditto:
+    source:
+      hono:
+        enabled: true
+        tenantName: ditto
+        username: "ditto"
+        password: "ditto"
+      mosquitto:
+        enabled: true
+        address: "telemetry/#"
+    target:
+      mosquitto:
+        enabled: true
+        address: "opentwins/#"
+      kafka:
+        enabled: false
+        topic: "opentwins"
+  
+  # The data received in Eclipse Ditto must be written to a messaging broker that acts as an intermediary with telegraf, the database collector. 
+  # This broker can be Kafka (kafka) or Mosquitto (mqtt). 
+  telegraf:
+    source:
+      mosquitto:
+        enabled: true
+    target:
+      influxdb2:
+        enabled: true       
+
+
+# If you need to work with your own InfluxDB2 or connect more than one, you can add them here as a list.
+# They will automatically connect to Grafana and Telegraf (if enabled).
+externalInfluxdb2: {}
+#  - name: anyName # Do not use hyphens or underscores
+#    url: https://anyPlace/
+#    bucket: anyBucket
+#    organization: anyOrganization
+#    token: anyToken
+
+
+# If you need to work with your own Mosquitto or connect more than one, you can add them here as a list.
+# Currently it only connects to Eclipse Ditto, although it is planned to allow it to replace the mosquitto that will be installed in the helm (and connect with Telegraf).
+externalMosquitto: {}
+#  - name: anyName # Do not use hyphens or underscores
+#    uri: tcp://user:pass@hostname:1883 #{protocol}://{username}:{password}@{hostname}:{port}/{path}
+#    addresses: 
+#      - example/#
+#      - example2/#
+
+
+# OpenTwins recommended values for Eclipse Ditto
+##################################################################
+ditto:
+  # OpenTwins custom values
+  ####################################
+  # Value to indicate if this component should be installed or not
+  enabled: true 
+
+  # Enables a workaround pod that cleans up stale connections that remain in a zombie state (neither open nor closed) after a crash.
+  cleanupStaleConnections: true
+  
+
+  # Eclipse Ditto Helm Chart Values
+  ####################################
+  nameOverride: ditto
+  global:
+    hashedBasicAuthUsers: false
+    basicAuthUsers:
+      ditto:
+        user: ditto
+        password: ditto
+      devops:
+        user: devops
+        password: foobar
+  nginx:
+    service:
+      type: NodePort
+      nodePort: 30525
+  swaggerui:
+    enabled: false
+  dittoui:
+    enabled: false
+
+  # ----------------------------------------------
+  # Do not modify this unless you want to use your own mongodb or ditto mongodb. 
+  # Opentwins can display two different mongodb charts. In case of displaying both, the bitnami one will take precedence.
+  mongodb:
+    enabled: false
+    image: {}
+
+  dbconfig:
+    uriSecret: ditto-mongodb-connection-secret
+  # ----------------------------------------------
+
+  gateway:
+    config:
+      authentication:
+        enablePreAuthentication: true
+        devops:
+          devopsPassword: foobar
+          statusPassword: foobar
+  #connectivity:
+  #  readinessProbe:
+  #    initialDelaySeconds: 30
+  #  livenessProbe:
+  #    initialDelaySeconds: 80
+
+
+
+# OpenTwins recommended values for Mosquitto
+##################################################################
+mosquitto:
+  enabled: true # Value added by OpenTwins to indicate if this component should be installed or not
+  nameOverride: mosquitto
+  service:
+    type: NodePort
+    nodePort: 30511
+  configuration:
+    authentication:
+      enabled: false
+
+
+
+# OpenTwins recommended values for Kafka (DO NOT USE, IN DEVELOPMENT)
+##################################################################
+kafka:
+  enabled: false
+
+strimzi-kafka-operator: #(DO NOT USE, IN DEVELOPMENT)
+  enabled: false
+  installCRDs: true
+
+# OpenTwins recommended values for Kafka-ML (DO NOT USE, IN DEVELOPMENT)
+##################################################################
+kafkaml:
+  enabled: false
+  image:
+    repository: ertis
+    pullPolicy: Always
+    tag: "master"
+
+  # Service Configuration
+  # You can change type to NodePort, ClusterIP or LoadBalancer for each
+  services:
+    backend:
+      type: NodePort
+      port: 8000
+      nodePort: 30527
+    frontend:
+      type: LoadBalancer
+      port: 80
+      nodePort: 
+    pthexecutor:
+      type: ClusterIP
+      port: 8002
+      nodePort: 
+    tfexecutor:
+      type: ClusterIP
+      port: 8001
+      nodePort: 
+
+  # Infrastructure & App Config
+  brokers: ""
+  debug: "true"
+  config:
+    controlTopic: "KAFKA_ML_CONTROL_TOPIC"
+    modelLoggerTopic: "FEDERATED_MODEL_CONTROL_TOPIC"
+    frontendUrl: "http://localhost"
+    backendAllowedHosts: "127.0.0.1,localhost"
+
+  # Blockchain
+  blockchain:
+    enable: "0"
+    rpcUrl: "http://blockchain:8000"
+    chainId: "1337"
+    networkId: "1999"
+    walletAddress: "0x0"
+    walletKey: "ffff"
+    blockscoutUrl: "http://blockscout:8000"
+    tokenName: "KafkaML-FedToken"
+    tokenSymbol: "KFKMLA"
+    
+
+# OpenTwins recommended values for Telegraf
+##################################################################
+telegraf:
+  enabled: true # Value added by OpenTwins to indicate if this component should be installed or not
+  metrics:
+    internal:
+      enabled: false
+  config:
+# Do no modify
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    processors: [] 
+    outputs: [] 
+    inputs: [] 
+  service:
+    enabled: false 
+  volumes:
+    - name: my-config
+      configMap:
+        name: opentwins-telegraf-real-config
+  volumeMounts:
+    - name: my-config
+      mountPath: /additional_config
+  args:
+    - "--config=/etc/telegraf/telegraf.conf"
+    - "--config-directory=/additional_config"
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+
+# OpenTwins recommended values for InfluxDB2
+##################################################################
+influxdb2:
+  enabled: true # Value added by OpenTwins to indicate if this component should be installed or not
+  nameOverride: influxdb2
+  persistence:
+    enabled: true
+  service:
+    type: NodePort
+    nodePort: 30716
+  image:
+    pullPolicy: Always
+  adminUser:
+    organization: "opentwins"
+    bucket: "default"
+    password: "password"
+  # ----------------------------------------------
+  # We have generated this token randomly in this page: https://generate-random.org/api-token-generator
+  # We recommend to generate one of your own and assign it to this value in your values file.
+    token: "Hjh3ysMQ6evK=qqpFSYqn-s3JGovJLfHxyCDM=eNNZkdM-uuro93dNtJcodejLYYob2geKQ/29z3Kxui=y6FlL?dZeU9EFRxrYn284V/kZG5==jxLVAMJrYOv?LF79ahwIbhvstMN6gmfQ3DH7/IzUB7VlBZK-cd8aN7YqiFrYRLkBUv7H0QkbqPxgf2dMgCMCwZaLMk9RUeMaBfx2lQ=Mq1EEJJw-Jp!BmpCDnhlc!6D22PaE=Y3sgWWNhRv8oP"
+  # ----------------------------------------------
+
+
+
+# OpenTwins recommended values for Grafana
+##################################################################
+grafana:
+  enabled: true # Value added by OpenTwins to indicate if this component should be installed or not
+  persistence:
+    enabled: true
+  service:
+    type: NodePort
+    nodePort: 30718
+  adminUser: admin
+  adminPassword: admin
+  grafana.ini:
+    plugins:
+      plugin_admin_enabled: true
+      allow_loading_unsigned_plugins: ertis-opentwins,ertis-unity-panel,ertis-opentwins-app
+    navigation.app_sections:
+      ertis-opentwins-app: root -1700
+  sidecar:
+    datasources:
+      enabled: true
+    plugins:
+      enabled: true
+  extraInitContainers:
+  - name: install-opentwins-plugins
+    image: busybox
+    command:
+      - /bin/sh
+      - -c
+      - |
+        #!/bin/sh
+        set -euo pipefail
+        mkdir -p /grafana-storage/plugins
+        cd /grafana-storage/plugins
+        wget --no-cache --no-check-certificate -O ertis-opentwins-app.zip https://github.com/ertis-research/opentwins-in-grafana/releases/download/latest/ertis-opentwins-app.zip
+        unzip -o ertis-opentwins-app.zip
+        rm ertis-opentwins-app.zip
+        wget --no-cache --no-check-certificate -O ertis-unity-panel.zip https://github.com/ertis-research/grafana-panel-unity/releases/download/latest/ertis-unity-panel.zip
+        unzip -o ertis-unity-panel.zip
+        rm ertis-unity-panel.zip
+    volumeMounts:
+    - name: storage
+      mountPath: /grafana-storage
+
+# OpenTwins recommended values for Eclipse Hono
+##################################################################
+hono:
+  nameHonoTenant: opentwins
+  enabled: false # Value added by OpenTwins to indicate if this component should be installed or not
+  nameOverride: hono
+  prometheus:
+    createInstance: false
+  grafana:
+    enabled: false
+  useLoadBalancer: false
+  probes:
+    livenessProbe:
+      initialDelaySeconds: 900
+    readinessProbe:
+      initialDelaySeconds: 45
+  messagingNetworkTypes:
+  - "amqp"
+  kafka:
+    auth:
+      sasl:
+        jaas:
+          clientUsers:
+            - "hono"
+            - "ditto"
+          clientPasswords:
+            - "hono-secret"
+            - "ditto"
+  kafkaMessagingClusterExample:
+    enabled: false
+  amqpMessagingNetworkExample:
+    enabled: true
+  deviceRegistryExample:
+    type: mongodb
+    addExampleData: false
+    # Increase memory limits for device registry to prevent OOMKilled
+    resources:
+      requests:
+        cpu: "150m"
+        memory: "400Mi"
+      limits:
+        cpu: "1"
+        memory: "512Mi"
+    mongoDBBasedDeviceRegistry:
+      mongodb:
+        host: '{{ .Release.Name }}-mongodb' # The values are processed via the 'tpl' function here in Eclipse Hono helm, allowing the inclusion of the release name
+        port: 27017
+        dbName: hono
+      # Increase memory limits for MongoDB based registry
+      resources:
+        requests:
+          cpu: "150m"
+          memory: "400Mi"
+        limits:
+          cpu: "1"
+          memory: "512Mi"
+    hono:
+      registry:
+        http:
+          insecurePortEnabled: true
+          insecurePortBindAddress: "0.0.0.0"
+          authenticationRequired: false
+  adapters: # This needs to be defined for the Eclipse Hono Helm to work (it seems to be a bug)
+    mqtt:
+      enabled: true
+      hono:
+        mqtt:
+          insecurePortEnabled: true
+    http:
+      hono:
+        http:
+          insecurePortEnabled: true
+    amqp:
+      hono:
+        amqp:
+          insecurePortEnabled: true
+
+
+
+# OpenTwins recommended values for bitnami MongoDB
+##################################################################
+mongodb:
+  enabled: true
+  nameOverride: mongodb
+  service:
+    type: NodePort
+    nodePorts:
+      mongodb: 30717
+  persistence:
+    enabled: true
+  auth:
+    enabled: false
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/mongodb
+    tag: 6.0.10-debian-11-r8
+  volumePermissions:
+    enabled: true
+    image: 
+      registry: docker.io
+      repository: bitnamilegacy/os-shell
+      tag: 11-debian-11-r72
+
+
+# Unity WebGL Server
+##################################################################
+unityWebglServer:
+  enabled: true
+  image: nginx:alpine
+  service:
+    type: NodePort
+    port: 80
+    nodePort: 30530
+
+
+# OpenTwins recommended values for Ditto Extended API
+##################################################################
+extendedAPI:
+  enabled: true
+  image:
+    repository: ertis/ditto-extended-api
+    tag: latest
+  allLogs: false
+  service:
+    port: 8080
+    nodePort: 30528
+      
+

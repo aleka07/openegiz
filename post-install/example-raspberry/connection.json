@@ -1,0 +1,35 @@
+{
+    "name": "example-raspberry-source-connection",
+    "connectionType": "mqtt-5",
+    "connectionStatus": "open",
+    "failoverEnabled": true,
+    "uri": "tcp://broker.hivemq.com:1883",
+    "sources": [
+        {
+            "addresses": [
+                "opentwins-example/dont-copy/only-example/very-insecure/DHT22_1",
+                "opentwins-example/dont-copy/only-example/very-insecure/DHT22_2"
+            ],
+            "consumerCount": 1,
+            "qos": 0,
+            "authorizationContext": [
+                "pre-authenticated:insecure-external-hiveml"
+            ],
+            "payloadMapping": ["javascript"],
+            "headerMapping": {
+                "topic": {{ printf "\"{{ header:mqtt.topic }}\"" }},
+                "the-qos": {{ printf "\"{{ header:mqtt.qos }}\"" }},
+                "content-type": "application/json"
+            }
+        }
+    ],
+    "targets": [],
+    "mappingDefinitions": {
+        "javascript" : {
+            "mappingEngine" : "JavaScript",
+            "options" : {
+                "incomingScript": "function mapToDittoProtocolMsg(headers, textPayload, bytePayload, contentType) { const jsonData = JSON.parse(textPayload); const temperature = jsonData['temp']; const humidity = jsonData['hum']; const topic_split = headers['mqtt.topic'].split('/'); const id = topic_split[topic_split.length-1]; const features = { temperature: { properties: { value: temperature, time: Date.now() } }, humidity: { properties: { value: humidity, time: Date.now() } } }; return Ditto.buildDittoProtocolMsg( 'raspberry', id, 'things', 'twin', 'commands', 'modify', '/features', headers, features ); }"
+            }
+        }   
+    }
+}

@@ -1,0 +1,21 @@
+{
+    "policyId": "example:very_insecure_policy",
+    "attributes": {
+        "location": "Spain",
+        "description": "The DHT22 (AM2302) is a low cost, high performance digital temperature and relative humidity sensor.",
+        "name": "DHT22",
+        "image": "https://img.joomcdn.net/917b3e353a4bfc30e52413e88aa62b0f497d8997_original.jpeg"
+    },
+    "features": {
+        "humidity": {
+            "properties": {
+                "value": null
+            }
+        },
+        "temperature": {
+            "properties": {
+                "value": null
+            }
+        }
+    }
+}

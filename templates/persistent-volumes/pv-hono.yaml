@@ -1,0 +1,16 @@
+{{- if and .Values.hono.enabled .Values.persistentVolumes.hono }}
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-opentwins-hono
+spec:
+  accessModes: 
+   - ReadWriteOnce
+  capacity:
+    storage: 1Mi
+  hostPath:
+    path: /opentwins/hono
+    type: Directory
+
+{{- end }}

@@ -1,0 +1,22 @@
+{
+    "name": "hono-amqp-10-{{ .Values.connections.ditto.source.hono.tenantName }}",
+    "connectionType": "amqp-10",
+    "connectionStatus": "open",
+    "uri": "amqp://{{ .Values.connections.ditto.source.hono.username }}:{{ .Values.connections.ditto.source.hono.password }}@{{ include "opentwins.hono.fullname" . }}-dispatch-router-ext:15672",
+    "failoverEnabled": true,
+    "sources": [
+      {
+        "addresses": [
+          "telemetry/{{ .Values.connections.ditto.source.hono.tenantName }}",
+          "event/{{ .Values.connections.ditto.source.hono.tenantName }}"
+        ],
+        "authorizationContext": [
+          "pre-authenticated:hono-connection-{{ .Values.connections.ditto.source.hono.tenantName }}"
+        ],
+        "headerMapping": {
+          "hono-device-id": {{ "{{ header:device_id }}" | quote }},
+          "content-type": {{ "{{ header:content-type }}" | quote }}
+        }
+      }
+    ]
+  }

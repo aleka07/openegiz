@@ -1,0 +1,25 @@
+apiVersion: v2
+appVersion: 3.3.7
+dependencies:
+- condition: mongodb.enabled
+  name: mongodb
+  repository: https://charts.bitnami.com/bitnami
+  version: ^12.x
+description: 'Eclipse Ditto™ is a technology in the IoT implementing a software pattern
+  called “digital twins”. A digital twin is a virtual, cloud based, representation
+  of his real world counterpart (real world “Things”, e.g. devices like sensors, smart
+  heating, connected cars, smart grids, EV charging stations etc). '
+home: https://www.eclipse.dev/ditto
+icon: https://www.eclipse.dev/ditto/images/ditto.svg
+keywords:
+- iot-chart
+- digital-twin
+- IoT
+maintainers:
+- email: thomas.jaeckle@beyonnex.io
+  name: thjaeckle
+name: ditto
+sources:
+- https://github.com/eclipse-ditto/ditto
+type: application
+version: 3.3.7

@@ -1,0 +1,165 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mosquitto.fullname" . }}
+  labels:
+{{ include "mosquitto.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "mosquitto.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "mosquitto.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      serviceAccountName: {{ template "mosquitto.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ tpl .Values.image.tag . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: default
+              containerPort: 1883
+              protocol: TCP
+            {{- if .Values.configuration.ssl.enabled }}
+            - name: ssl
+              containerPort: 8883
+              protocol: TCP
+            {{- end }}
+            - name: websocket
+              containerPort: 9001
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: default
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            tcpSocket:
+              port: default
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - mountPath: "/mosquitto/"
+              name: empty
+              readOnly: false
+      initContainers:  
+        - name: setup-config
+          image: "{{ .Values.image.repository }}:{{ tpl .Values.image.tag . }}"
+          imagePullPolicy: IfNotPresent
+          command: 
+            - /bin/sh
+            - -ex
+            - -c
+            - |
+              if [ -d /mosquitto/config/ ]; then
+                echo "Directory /mosquitto/config/ already exists. Exiting with success."
+                exit 0
+              fi
+              mkdir /mosquitto/config/ &&
+              cp /config/mosquitto.conf /mosquitto/config/ &&
+              chmod -R 777 /mosquitto
+          volumeMounts:
+            - mountPath: "/mosquitto/"
+              name: empty
+            - mountPath: "/config"
+              name: config
+    {{- if .Values.configuration.authentication.enabled }}
+        - name: setup-auth
+          image: "{{ .Values.image.repository }}:{{ tpl .Values.image.tag . }}"
+          imagePullPolicy: IfNotPresent
+          command: 
+            - /bin/sh
+            - -ex
+            - -c
+            - |
+              if [ -d /mosquitto/auth/ ]; then
+                echo "Directory /mosquitto/auth/ already exists. Exiting with success."
+                exit 0
+              fi
+              mkdir /mosquitto/auth/ &&
+              cp /aux/passwd /mosquitto/auth/ &&
+              chmod 0700 /mosquitto/auth/passwd &&
+              mosquitto_passwd -U /mosquitto/auth/passwd
+          volumeMounts:
+            - mountPath: "/aux"
+              name: vol-passwd
+            - mountPath: "/mosquitto/"
+              name: empty
+    {{- end }}
+    {{- if .Values.configuration.ssl.enabled }} 
+        - name: setup-ssl
+          image: busybox:latest
+          command: 
+            - /bin/sh
+            - -ex
+            - -c
+            - |
+              if [ -d /mosquitto/certs/ ]; then
+                echo "Directory /mosquitto/certs/ already exists. Exiting with success."
+                exit 0
+              fi
+              mkdir /mosquitto/certs/ &&
+              cp /cert/default.pem /mosquitto/certs/ &&
+              chown 1000:1000 /mosquitto/certs/default.pem &&
+              cp /key/default.key /mosquitto/certs/ &&
+              chown 1000:1000 /mosquitto/certs/default.key
+          volumeMounts:
+          - mountPath: "/cert"
+            name: certfile
+          - mountPath: "/key"
+            name: keyfile
+          - mountPath: "/mosquitto/"
+            name: empty
+    {{- end }}
+      volumes:
+        - name: empty
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: {{ template "mosquitto.fullname" . }}
+            defaultMode: 0777
+      {{- if .Values.configuration.authentication.enabled }}
+        - name: vol-passwd
+          configMap:
+            name: {{ .Release.Name }}-mosquitto-passwd
+            defaultMode: 0777
+      {{- end }}
+      {{- if .Values.configuration.ssl.enabled }}
+      {{- if .Values.configuration.ssl.certfile.data }}
+        - name: certfile
+          secret:
+            secretName: {{ .Release.Name }}-mosquitto-certfile
+      {{- end }}
+      {{- if .Values.configuration.ssl.keyfile.data }}
+        - name: keyfile
+          secret:
+            secretName: {{ .Release.Name }}-mosquitto-keyfile
+      {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}

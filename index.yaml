@@ -1,0 +1,230 @@
+apiVersion: v1
+entries:
+  ditto:
+  - apiVersion: v2
+    appVersion: 3.3.7
+    created: "2026-01-26T18:32:31.8077573+01:00"
+    dependencies:
+    - condition: mongodb.enabled
+      name: mongodb
+      repository: https://charts.bitnami.com/bitnami
+      version: ^12.x
+    description: 'Eclipse Ditto™ is a technology in the IoT implementing a software
+      pattern called “digital twins”. A digital twin is a virtual, cloud based, representation
+      of his real world counterpart (real world “Things”, e.g. devices like sensors,
+      smart heating, connected cars, smart grids, EV charging stations etc). '
+    digest: ba1b4b2bf229519ac53dcdf87a7b01d5f8ed59bf52dc7150e7f393d9a9eb6a7c
+    home: https://www.eclipse.dev/ditto
+    icon: https://www.eclipse.dev/ditto/images/ditto.svg
+    keywords:
+    - iot-chart
+    - digital-twin
+    - IoT
+    maintainers:
+    - email: thomas.jaeckle@beyonnex.io
+      name: thjaeckle
+    name: ditto
+    sources:
+    - https://github.com/eclipse-ditto/ditto
+    type: application
+    urls:
+    - charts/ditto-3.3.7.tgz
+    version: 3.3.7
+  grafana:
+  - annotations:
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Chart Source
+          url: https://github.com/grafana/helm-charts
+        - name: Upstream Project
+          url: https://github.com/grafana/grafana
+    apiVersion: v2
+    appVersion: 12.3.0
+    created: "2026-01-26T18:32:31.8195741+01:00"
+    description: The leading tool for querying and visualizing time series and metrics.
+    digest: 722d2de088ab697df64fcf8200846308ce92cad7074ce5fdff741ac4f02a638d
+    home: https://grafana.com
+    icon: https://artifacthub.io/image/b4fed1a7-6c8f-4945-b99d-096efa3e4116
+    keywords:
+    - monitoring
+    - metric
+    kubeVersion: ^1.8.0-0
+    maintainers:
+    - email: zanhsieh@gmail.com
+      name: zanhsieh
+    - email: rluckie@cisco.com
+      name: rtluckie
+    - email: maor.friedman@redhat.com
+      name: maorfr
+    - email: miroslav.hadzhiev@gmail.com
+      name: Xtigyro
+    - email: mail@torstenwalter.de
+      name: torstenwalter
+    - email: github@jkroepke.de
+      name: jkroepke
+    - email: quentin.bisson@gmail.com
+      name: QuentinBisson
+    name: grafana
+    sources:
+    - https://github.com/grafana/grafana
+    - https://github.com/grafana/helm-charts
+    type: application
+    urls:
+    - charts/grafana-10.1.5.tgz
+    version: 10.1.5
+  hono:
+  - apiVersion: v2
+    appVersion: 2.6.0
+    created: "2026-01-26T18:32:31.8984228+01:00"
+    dependencies:
+    - condition: prometheus.createInstance
+      name: prometheus
+      repository: https://prometheus-community.github.io/helm-charts
+      version: ^14.x
+    - condition: grafana.enabled
+      name: grafana
+      repository: https://grafana.github.io/helm-charts
+      version: ^6.x
+    - condition: mongodb.createInstance
+      name: mongodb
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: ~13.x
+    - condition: kafkaMessagingClusterExample.enabled
+      name: kafka
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: ^26.8
+    description: 'Eclipse Hono™ provides remote service interfaces for connecting
+      large numbers of IoT devices to a back end and interacting with them in a uniform
+      way regardless of the device communication protocol. '
+    digest: 840aa10d782be4ba41f967177d7e9d6be00c61d8de95a909d67678dd79b510f8
+    home: https://www.eclipse.org/hono/
+    icon: https://eclipse.dev/hono/img/hono-logo_image.svg
+    keywords:
+    - iot-chart
+    - IoT
+    - connectivity
+    - messaging
+    - Kafka
+    maintainers:
+    - email: dbosanac@redhat.com
+      name: dejanb
+    - email: kai.hudalla@bosch.io
+      name: sophokles73
+    name: hono
+    sources:
+    - https://github.com/eclipse-hono/hono
+    urls:
+    - charts/hono-2.6.6.tgz
+    version: 2.6.6
+  influxdb2:
+  - apiVersion: v2
+    appVersion: 2.7.4
+    created: "2026-01-26T18:32:31.8999498+01:00"
+    description: A Helm chart for InfluxDB v2
+    digest: 1da8b1e8a2b93e9acbb0bc9a9c0a3e526581ccde4bf271785d09699ed219ca08
+    home: https://www.influxdata.com/products/influxdb/
+    icon: https://avatars0.githubusercontent.com/u/5713248?s=200&v=4
+    maintainers:
+    - email: rawkode@influxdata.com
+      name: rawkode
+    - email: giacomo@influxdata.com
+      name: gitirabassi
+    name: influxdb2
+    type: application
+    urls:
+    - charts/influxdb2-2.1.2.tgz
+    version: 2.1.2
+  mongodb:
+  - annotations:
+      category: Database
+      images: |
+        - name: kubectl
+          image: docker.io/bitnami/kubectl:1.25.14-debian-11-r5
+        - name: mongodb-exporter
+          image: docker.io/bitnami/mongodb-exporter:0.39.0-debian-11-r106
+        - name: mongodb
+          image: docker.io/bitnami/mongodb:6.0.10-debian-11-r8
+        - name: nginx
+          image: docker.io/bitnami/nginx:1.25.2-debian-11-r32
+        - name: os-shell
+          image: docker.io/bitnami/os-shell:11-debian-11-r72
+      licenses: Apache-2.0
+    apiVersion: v2
+    appVersion: 6.0.10
+    created: "2026-01-26T18:32:31.9158919+01:00"
+    dependencies:
+    - name: common
+      repository: oci://registry-1.docker.io/bitnamicharts
+      tags:
+      - bitnami-common
+      version: 2.x.x
+    description: MongoDB(R) is a relational open source NoSQL database. Easy to use,
+      it stores data in JSON-like documents. Automated scalability and high-performance.
+      Ideal for developing cloud native applications.
+    digest: 6ce88f3e6c7c82f4f1d9e9ce91504382011c06d96f0dfcd23d1e6bc9fcc9e046
+    home: https://bitnami.com
+    icon: https://bitnami.com/assets/stacks/mongodb/img/mongodb-stack-220x234.png
+    keywords:
+    - mongodb
+    - database
+    - nosql
+    - cluster
+    - replicaset
+    - replication
+    maintainers:
+    - name: VMware, Inc.
+      url: https://github.com/bitnami/charts
+    name: mongodb
+    sources:
+    - https://github.com/bitnami/charts/tree/main/bitnami/mongodb
+    urls:
+    - charts/mongodb-13.18.5.tgz
+    version: 13.18.5
+  mosquitto:
+  - apiVersion: v1
+    appVersion: 1.6.10
+    created: "2026-01-26T18:32:31.9178955+01:00"
+    description: Eclipse Mosquitto - An open source MQTT broker
+    digest: e45b7a456f28a31310dcd322f231d1fd9c3d5584266ad1c7f6de24cc6d64a468
+    home: https://mosquitto.org/
+    icon: https://mosquitto.org/images/mosquitto-text-side-28.png
+    keywords:
+    - message queue
+    - MQTT
+    - mosquitto
+    - eclipse-iot
+    name: mosquitto
+    sources:
+    - https://github.com/eclipse/mosquitto
+    urls:
+    - charts/mosquitto-0.3.1.tgz
+    version: 0.3.1
+  telegraf:
+  - apiVersion: v2
+    appVersion: 1.37.0
+    created: "2026-01-26T18:32:31.9294303+01:00"
+    description: Telegraf is an agent written in Go for collecting, processing, aggregating,
+      and writing metrics.
+    digest: d6534e029198369123961abd79c040db0d57b6bb18d449f80348cd2f78ac9519
+    home: https://www.influxdata.com/time-series-platform/telegraf/
+    icon: https://avatars0.githubusercontent.com/u/5713248?s=200&v=4
+    keywords:
+    - telegraf
+    - collector
+    - timeseries
+    - influxdata
+    - influxdb
+    - agent
+    maintainers:
+    - email: rawkode@influxdata.com
+      name: rawkode
+    - email: giacomo@influxdata.com
+      name: gitirabassi
+    name: telegraf
+    sources:
+    - https://github.com/influxdata/helm-charts/tree/master/charts/telegraf
+    - https://github.com/influxdata/helm-charts/
+    urls:
+    - charts/telegraf-1.8.66.tgz
+    version: 1.8.66
+generated: "2026-01-26T18:32:31.7796769+01:00"

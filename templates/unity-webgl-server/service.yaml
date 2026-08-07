@@ -1,0 +1,19 @@
+{{- if .Values.unityWebglServer.enabled }}
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-unity-webgl-server
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}-unity-webgl-server
+spec:
+  type: {{ .Values.unityWebglServer.service.type }}
+  ports:
+  - name: http
+    port: {{ .Values.unityWebglServer.service.port }}
+    targetPort: 80
+    nodePort: {{ .Values.unityWebglServer.service.nodePort }}
+  selector:
+    app.kubernetes.io/name: {{ .Release.Name }}-unity-webgl-server
+
+{{- end }}

@@ -1,0 +1,21 @@
+# Patterns to ignore when building packages
+.git/
+.gitignore
+.idea/
+.vscode/
+*.swp
+*.bak
+*.tmp
+*~
+.DS_Store
+
+# Ignore build artifacts
+target/
+bin/
+build/
+node_modules/
+
+# Project-specific exclusions
+data-generator/
+.gitignore
+scripts/

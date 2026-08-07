@@ -1,0 +1,48 @@
+<svg width="1600" height="1600" viewBox="0 0 1600 1600" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="loopGrad" x1="80" y1="210" x2="540" y2="210" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0C43C5"/>
+      <stop offset="0.40" stop-color="#1767D8"/>
+      <stop offset="0.74" stop-color="#1C97E4"/>
+      <stop offset="1" stop-color="#1FD7BC"/>
+    </linearGradient>
+    <linearGradient id="egizGrad" x1="1020" y1="210" x2="1490" y2="210" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0B3A87"/>
+      <stop offset="0.45" stop-color="#1D79DE"/>
+      <stop offset="0.78" stop-color="#23A7E4"/>
+      <stop offset="1" stop-color="#11C8B4"/>
+    </linearGradient>
+    <linearGradient id="circuitGrad" x1="235" y1="210" x2="385" y2="210" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0F47C9"/>
+      <stop offset="1" stop-color="#20D1B8"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#0B2140" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+
+  <g transform="translate(158.75 609.75) scale(0.9)">
+    <g filter="url(#softShadow)" stroke="url(#loopGrad)" stroke-width="48" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M252 108C218 73 160 68 119 96C76 126 54 182 68 237C82 292 128 328 185 329C213 329 238 319 257 301"/>
+      <path d="M367 108C401 73 459 68 500 96C543 126 565 182 551 237C537 292 491 328 434 329C406 329 381 319 362 301"/>
+    </g>
+
+    <g stroke="url(#circuitGrad)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" fill="url(#circuitGrad)">
+      <path d="M239 181H363"/>
+      <circle cx="223" cy="181" r="12"/>
+      <circle cx="380" cy="181" r="12"/>
+
+      <path d="M271 210H398"/>
+      <circle cx="255" cy="210" r="12"/>
+      <circle cx="415" cy="210" r="12"/>
+
+      <path d="M239 239H363"/>
+      <circle cx="223" cy="239" r="12"/>
+      <circle cx="380" cy="239" r="12"/>
+    </g>
+
+    <text x="635" y="285" font-family="Inter, Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="190" font-weight="500" letter-spacing="-8">
+      <tspan fill="#06255F">open</tspan><tspan fill="url(#egizGrad)">egiz</tspan>
+    </text>
+  </g>
+</svg>

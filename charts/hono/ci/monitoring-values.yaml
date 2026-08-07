@@ -1,0 +1,46 @@
+#
+# Copyright (c) 2021, 2022 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0
+#
+# SPDX-License-Identifier: EPL-2.0
+#
+
+# profile for installing Hono
+# - with monitoring infrastructure
+# - with AMQP 1.0 messaging only
+# - with HTTP adapter only
+
+useLoadBalancer: false
+
+prometheus:
+  createInstance: true
+
+grafana:
+  enabled: true
+
+messagingNetworkTypes:
+- "amqp"
+
+kafkaMessagingClusterExample:
+  enabled: false
+
+amqpMessagingNetworkExample:
+  enabled: true
+
+adapters:
+  amqp:
+    enabled: false
+  coap:
+    enabled: false
+  http:
+    enabled: true
+  mqtt:
+    enabled: false
+  lora:
+    enabled: false

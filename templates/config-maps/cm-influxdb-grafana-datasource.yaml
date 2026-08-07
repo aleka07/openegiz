@@ -1,0 +1,48 @@
+{{- if and .Values.grafana.enabled (or .Values.influxdb2.enabled .Values.externalInfluxdb2) }}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Release.Name }}-influxdb2-grafana-datasource"
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    "{{ .Values.grafana.sidecar.datasources.label }}": ""
+data:
+  datasources.yaml: |+
+    apiVersion: 1
+    datasources:
+{{- if .Values.influxdb2.enabled }}
+      - name: opentwins
+        type: influxdb
+        access: proxy
+        url: http://{{ include "opentwins.influxdb2.fullname" . }}:80
+        isDefault: true
+        jsonData:
+          version: Flux
+          organization: "{{ .Values.influxdb2.adminUser.organization }}"
+          defaultBucket: "{{ .Values.influxdb2.adminUser.bucket }}"
+          tlsSkipVerify: true
+        secureJsonData:
+          token: "{{ .Values.influxdb2.adminUser.token }}"
+{{- end }}
+{{- if .Values.externalInfluxdb2 }}
+  {{- range $v := .Values.externalInfluxdb2 }}
+      - name: {{ $v.name }}
+        type: influxdb
+        access: proxy
+        url: {{ $v.url }}
+        isDefault: false
+        jsonData:
+          version: Flux
+          organization: "{{ $v.organization }}"
+          defaultBucket: "{{ $v.bucket }}"
+          tlsSkipVerify: true
+        secureJsonData:
+          token: "{{ $v.token }}"
+  {{- end }}
+{{- end }}
+
+{{- end }}

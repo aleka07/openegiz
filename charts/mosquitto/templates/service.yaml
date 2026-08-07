@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mosquitto.fullname" . }}
+  labels:
+{{ include "mosquitto.labels" . | indent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ include "mosquitto.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  type: {{ .Values.service.type }}
+{{- if .Values.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ .Values.service.externalTrafficPolicy }}
+{{- end }}
+{{- if .Values.service.externalIPs }}
+  externalIPs: 
+{{ toYaml .Values.service.externalIPs | indent 4 }}
+{{- end }} 
+{{- if .Values.service.loadBalancerIP }}
+  loadBalancerIP: {{ .Values.service.loadBalancerIP }}
+{{- end }}
+  ports:
+    - port: 1883
+      targetPort: default
+      protocol: TCP
+      name: default
+    {{- if .Values.service.nodePort }}
+      nodePort: {{ .Values.service.nodePort }}
+    {{- end}}
+  {{- if .Values.configuration.ssl.enabled }}
+    - port: 8883
+      targetPort: 8883
+      protocol: TCP
+      name: ssl
+  {{- end}}
+    - port: 9001
+      targetPort: websocket
+      protocol: TCP
+      name: websocket
+{{- if .Values.service.loadBalancerIP }}
+status:
+  loadBalancer:
+    ingress:  
+      - ip: {{ .Values.service.loadBalancerIP }}
+{{- end}}

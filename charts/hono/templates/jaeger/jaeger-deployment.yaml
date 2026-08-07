@@ -1,0 +1,77 @@
+{{- if .Values.jaegerBackendExample.enabled }}
+#
+# Copyright (c) 2019, 2022 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0
+#
+# SPDX-License-Identifier: EPL-2.0
+#
+{{- $args := dict "dot" . "component" "tracing" "name" "jaeger-all-in-one" "componentConfig" .Values.jaegerBackendExample }}
+{{- $healthCheckPort := include "hono.healthCheckPort" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- include "hono.metadata" $args | nindent 2 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "hono.matchLabels" $args | nindent 6 }}
+  template:
+    metadata:
+      {{- include "hono.metadata" $args | nindent 6 }}
+      {{- include "hono.podAdditionalLabels" $args | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ $healthCheckPort | quote }}
+        prometheus.io/scheme: "http"
+        {{- include "hono.podAdditionalAnnotations" $args | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "hono.pod.priorityClassName" $args | nindent 6 }}
+      {{- include "hono.pod.affinity" $args | nindent 6 }}
+      containers:
+      - name: jaeger
+        image: {{ .Values.jaegerBackendExample.allInOneImage }}
+        env:
+        - name: ADMIN_HTTP_HOST_PORT
+          value: {{ printf ":%s" $healthCheckPort | quote }}
+        - name: COLLECTOR_OTLP_ENABLED
+          value: "true"
+        {{- with .Values.jaegerBackendExample.env }}
+        {{- range $name,$value := . }}
+        - name: {{ .name }}
+          value: {{ .value | quote }}
+        {{- end }}
+        {{- end }}
+        ports:
+        - name: collector-grpc
+          containerPort: 14250
+          protocol: TCP
+        - name: otlp-grpc
+          containerPort: 4317
+          protocol: TCP
+        - name: server-http
+          containerPort: 5778
+          protocol: TCP
+        - name: query-http
+          containerPort: 16686
+          protocol: TCP
+        - name: health
+          containerPort: {{ $healthCheckPort }}
+          protocol: TCP
+        {{- include "hono.component.envFrom" $args | indent 8 }}
+        {{- with .Values.jaegerBackendExample.resources }}
+        resources:
+          {{- . | toYaml | nindent 10 }}
+        {{- end }}
+        {{- include "hono.component.healthChecks" $args | nindent 8 }}
+{{- end }}

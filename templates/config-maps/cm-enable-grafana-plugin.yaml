@@ -1,0 +1,30 @@
+{{- if and .Values.grafana.enabled }}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Release.Name }}-enable-grafana-plugin"
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    "{{ .Values.grafana.sidecar.plugins.label }}": ""
+data:
+  datasources.yaml: |+
+    apiVersion: 1
+    apps:
+      - type: ertis-opentwins-app
+        org_id: 1
+        jsonData:
+          dittoURL: http://{{ .Release.Name }}-ditto-nginx:{{ .Values.ditto.nginx.service.port }}
+          extendedURL: http://{{ .Release.Name }}-ditto-extended-api:{{ .Values.extendedAPI.service.port }}
+          dittoUsername: {{ .Values.ditto.global.basicAuthUsers.ditto.user }}
+          dittoDevopsUsername: {{ .Values.ditto.global.basicAuthUsers.devops.user }}
+        secureJsonData:
+          dittoPassword: {{ .Values.ditto.global.basicAuthUsers.ditto.password }}
+          dittoBasicAuth: {{ printf "%s:%s" .Values.ditto.global.basicAuthUsers.ditto.user .Values.ditto.global.basicAuthUsers.ditto.password | b64enc | quote }}
+          dittoDevopsPassword: {{ .Values.ditto.global.basicAuthUsers.devops.password }}
+          dittoDevopsBasicAuth: {{ printf "%s:%s" .Values.ditto.global.basicAuthUsers.devops.user .Values.ditto.global.basicAuthUsers.devops.password | b64enc | quote }}
+
+{{- end }}

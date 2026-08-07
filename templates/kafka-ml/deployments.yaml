@@ -1,0 +1,48 @@
+{{- if and .Values.kafkaml.enabled }}
+
+{{- $repo := .Values.kafkaml.image.repository -}}
+{{- $tag := .Values.kafkaml.image.tag -}}
+{{- $cm := printf "%s-kafkaml-configmap" .Release.Name -}}
+{{- $sa := printf "%s-kafkaml-sa" .Release.Name -}}
+
+# List of deployments to generate
+{{- $apps := list "backend" "frontend" "kafka-control-logger" "pthexecutor" "tfexecutor" -}}
+
+{{- range $app := $apps }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kafkaml.fullname" (dict "Release" $.Release "Component" $app) }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ $app }}
+      release: {{ $.Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $app }}
+        release: {{ $.Release.Name }}
+    spec:
+      {{- if eq $app "backend" }}
+      serviceAccountName: {{ $sa }}
+      {{- end }}
+      containers:
+      - name: {{ $app }}
+        image: {{ printf "%s/kafka-ml-%s:%s" $repo (replace "-" "_" $app) $tag }}
+        imagePullPolicy: {{ $.Values.kafkaml.image.pullPolicy }}
+        envFrom:
+        - configMapRef:
+            name: {{ $cm }}
+        {{- if eq $app "backend" }}
+        env:
+        - name: KUBE_NAMESPACE
+          valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+        - name: BOOTSTRAP_SERVERS
+          valueFrom: { configMapKeyRef: { name: {{ $cm }}, key: brokers } }
+        {{- end }}
+---
+{{- end }}
+
+{{- end }}

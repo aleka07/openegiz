@@ -1,0 +1,14 @@
+apiVersion: v1
+appVersion: 1.6.10
+description: Eclipse Mosquitto - An open source MQTT broker
+home: https://mosquitto.org/
+icon: https://mosquitto.org/images/mosquitto-text-side-28.png
+keywords:
+- message queue
+- MQTT
+- mosquitto
+- eclipse-iot
+name: mosquitto
+sources:
+- https://github.com/eclipse/mosquitto
+version: 0.3.1

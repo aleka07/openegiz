@@ -1,0 +1,99 @@
+#
+# Copyright (c) 2021 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0
+#
+# SPDX-License-Identifier: EPL-2.0
+#
+
+# profile for installing Hono
+# - without monitoring infrastructure
+# - with example Infinispan data grid
+# - with Kafka messaging only
+# - using native executable based images
+# - with CoAP adapter only
+
+useLoadBalancer: false
+
+dataGridExample:
+  enabled: true
+
+kafka:
+  externalAccess:
+    enabled: false
+  serviceAccount:
+    create: false
+  rbac:
+    create: false
+
+authServer:
+  imageName: "eclipse/hono-service-auth-native"
+  cmdLineArgs:
+  - "-Xmx24m"
+  resources:
+    requests:
+      cpu:
+      memory: "30Mi"
+    limits:
+      cpu:
+      memory: "30Mi"
+
+commandRouterService:
+  imageName: "eclipse/hono-service-command-router-infinispan-native"
+  cmdLineArgs:
+  - "-Xmx96m"
+  resources:
+    requests:
+      cpu:
+      memory: "120Mi"
+    limits:
+      cpu:
+      memory: "120Mi"
+
+deviceRegistryExample:
+  embeddedJdbcDeviceRegistry:
+    imageName: "eclipse/hono-service-device-registry-jdbc-native"
+    cmdLineArgs:
+    - "-Xmx160m"
+    resources:
+      requests:
+        cpu:
+        memory: "120Mi"
+      limits:
+        cpu:
+        memory: "120Mi"
+
+adapters:
+  amqp:
+    enabled: false
+  coap:
+    enabled: true
+    imageName: "eclipse/hono-adapter-coap-native"
+    cmdLineArgs:
+    - "-Xmx96m"
+    hono:
+      coap:
+        bindAddress: "0.0.0.0"
+        port: 5684
+        keyPath: "/opt/hono/tls/tls.key"
+        certPath: "/opt/hono/tls/tls.crt"
+        tenantIdleTimeout: "1h"
+        maxConnections: 70
+    resources:
+      requests:
+        cpu:
+        memory: "120Mi"
+      limits:
+        cpu:
+        memory: "120Mi"
+  http:
+    enabled: false
+  mqtt:
+    enabled: false
+  lora:
+    enabled: false

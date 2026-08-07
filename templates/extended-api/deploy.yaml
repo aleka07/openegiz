@@ -1,0 +1,50 @@
+{{- if and .Values.extendedAPI.enabled (or ((.Values.extendedAPI.ditto).uri) .Values.ditto.enabled) }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-ditto-extended-api
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Release.Name }}-ditto-extended-api
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Release.Name }}-ditto-extended-api
+    spec:
+      containers:
+      - name: ditto-extended-api
+        image: {{ printf "%s:%s" .Values.extendedAPI.image.repository .Values.extendedAPI.image.tag }}
+        imagePullPolicy: Always
+        env: 
+        - name: HOST 
+          value: "localhost" 
+        - name: PORT 
+          value: "{{ .Values.extendedAPI.service.port }}" 
+        - name: MONGO_URI_POLICIES 
+          value: {{- if ((.Values.extendedAPI.mongodb).uri) }} {{ .Values.extendedAPI.mongodb.uri }} {{- else }} mongodb://{{ include "opentwins.mongodb.fullname" . }}/ditto {{- end }}
+        - name: DITTO_URI_THINGS 
+          value: {{- if ((.Values.extendedAPI.ditto).uri) }} {{ .Values.extendedAPI.ditto.uri }} {{- else }} http://{{ include "opentwins.ditto.fullname" . }}-nginx:{{ .Values.ditto.nginx.service.port }} {{- end}}
+        - name: DITTO_USERNAME_API 
+          value: {{ coalesce ((((.Values.extendedAPI.ditto).credentials).basic).user) .Values.ditto.global.basicAuthUsers.ditto.user "ditto" }} 
+        - name: DITTO_PASSWORD_API 
+          value: {{ coalesce ((((.Values.extendedAPI.ditto).credentials).basic).password) .Values.ditto.global.basicAuthUsers.ditto.password "ditto" }} 
+        - name: DITTO_USERNAME_DEVOPS 
+          value: {{ coalesce ((((.Values.extendedAPI.ditto).credentials).devops).user) "devops" }} 
+        - name: DITTO_PASSWORD_DEVOPS 
+          value: {{ coalesce ((((.Values.extendedAPI.ditto).credentials).devops).password) .Values.ditto.gateway.config.authentication.devops.devopsPassword "foobar" }} 
+        - name: ALL_LOGS
+          value: {{ coalesce .Values.extendedAPI.allLogs false }}
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+
+{{- end }}

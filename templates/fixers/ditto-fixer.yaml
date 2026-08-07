@@ -1,0 +1,135 @@
+{{- if and .Values.ditto.enabled .Values.ditto.cleanupStaleConnections }}
+
+# 1. Definimos un volumen persistente pequeño (10Mi es suficiente para texto)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-ditto-fixer-pvc
+  labels:
+    app: ditto-fixer
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-ditto-fixer
+  labels:
+    app: ditto-fixer
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # Importante: Recreate para evitar bloqueo del volumen (RWO)
+  selector:
+    matchLabels:
+      app: ditto-fixer
+  template:
+    metadata:
+      labels:
+        app: ditto-fixer
+    spec:
+      containers:
+      - name: fixer
+        image: alpine:latest
+        command: ["/bin/sh", "-c"]
+        # Montamos el volumen en /data
+        volumeMounts:
+          - mountPath: "/data"
+            name: data-volume
+        args:
+          - |
+            BASE_URL="http://{{ include "opentwins.ditto.fullname" . }}-nginx:{{ .Values.ditto.nginx.service.port }}"
+            HEALTH_URL="http://{{ include "opentwins.ditto.fullname" . }}-gateway:{{ .Values.ditto.gateway.service.port }}/status/health"
+            API_URL="${BASE_URL}/api/2/connections"
+            AUTH="{{ .Values.ditto.global.basicAuthUsers.devops.user }}:{{ .Values.ditto.global.basicAuthUsers.devops.password }}"
+            
+            # --- PERSISTENCE CONFIGURATION ---
+            # We store data in /data so it survives pod restarts
+            SNAPSHOT_FILE="/data/last_known_connections.txt"
+            RECOVERY_FLAG="/data/recovery_needed.flag"
+
+            echo "[Fixer] Installing dependencies..."
+            apk add --no-cache curl jq > /dev/null
+
+            echo "---------------------------------------------------"
+            echo "[Fixer] DEBUG: Starting Persistent Monitor Mode"
+            echo "[Fixer] Storage Path: $SNAPSHOT_FILE"
+            echo "---------------------------------------------------"
+            
+            # Ensure volume is writable
+            touch "$SNAPSHOT_FILE" || echo "[Fixer] WARNING: Cannot write to /data!"
+
+            while true; do
+              # 1. Check Health
+              RESPONSE=$(curl --connect-timeout 5 -s "$HEALTH_URL")
+              STATUS=$(echo "$RESPONSE" | jq -r '.status' 2>/dev/null)
+
+              if [ "$STATUS" == "UP" ]; then
+                
+                # --- RECOVERY LOGIC ---
+                # Checks if we marked a crash previously OR if this pod just started fresh after a crash
+                if [ -f "$RECOVERY_FLAG" ]; then
+                  echo "[Fixer] System is UP. Recovery flag found."
+                  
+                  if [ -s "$SNAPSHOT_FILE" ]; then
+                    SAVED_IDS=$(cat "$SNAPSHOT_FILE")
+                    echo "[Fixer] Restoring from snapshot: $SAVED_IDS"
+                      
+                    for CONN_ID in $SAVED_IDS; do
+                        CMD_URL="${API_URL}/${CONN_ID}/command"
+                        echo "[Fixer] Restarting $CONN_ID..."
+                        curl -s -o /dev/null -X POST -u "$AUTH" -H "Content-Type: text/plain" -d "connectivity.commands:closeConnection" "$CMD_URL"
+                        sleep 1
+                        curl -s -o /dev/null -X POST -u "$AUTH" -H "Content-Type: text/plain" -d "connectivity.commands:openConnection" "$CMD_URL"
+                    done
+                    echo "[Fixer] Recovery completed."
+                  else
+                    echo "[Fixer] Snapshot file is empty. Nothing to restore."
+                  fi
+
+                  # Clean up flag
+                  rm -f "$RECOVERY_FLAG"
+                
+                # --- BACKUP LOGIC ---
+                else
+                  RAW_JSON=$(curl -s -u "$AUTH" "${API_URL}?fields=id,connectionStatus")
+                  
+                  # Verify JSON validity
+                  FIRST_CHAR=$(echo "$RAW_JSON" | head -c 1)
+                  if [ "$FIRST_CHAR" == "[" ] || [ "$FIRST_CHAR" == "{" ]; then
+                    
+                    CURRENT_IDS=$(echo "$RAW_JSON" | jq -r '.[] | select(.connectionStatus == "open") | .id' 2>/dev/null)
+                    
+                    if [ -n "$CURRENT_IDS" ]; then
+                      # Valid IDs found: Update the snapshot
+                      echo "$CURRENT_IDS" > "$SNAPSHOT_FILE"
+                    else
+                      # SAFEGUARD: If API returns empty list, it might be the "Zombie" bug.
+                      # We do NOT overwrite the snapshot with empty data to preserve the last known good state.
+                      # echo "[Fixer] API returned empty list. Keeping previous snapshot."
+                      :
+                    fi
+                  fi
+                fi
+
+              else
+                # --- SYSTEM DOWN LOGIC ---
+                echo "[Fixer] System NOT UP (Status: $STATUS). Setting recovery flag."
+                touch "$RECOVERY_FLAG"
+              fi
+              
+              sleep 30
+            done
+      volumes:
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-ditto-fixer-pvc
+{{- end }}

@@ -1,0 +1,17 @@
+{{- if and .Values.grafana.enabled .Values.persistentVolumes.grafana }}
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-opentwins-grafana
+spec:
+  volumeMode: Filesystem
+  accessModes:
+   - ReadWriteOnce
+  capacity:
+    storage: 10Gi
+  hostPath:
+    path: /opentwins/grafana
+    type: DirectoryOrCreate
+
+{{- end }}

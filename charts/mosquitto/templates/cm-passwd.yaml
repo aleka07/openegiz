@@ -1,0 +1,18 @@
+{{- if .Values.configuration.authentication.enabled }}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-mosquitto-passwd
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+data:
+  passwd: |-
+  {{- range $v := .Values.configuration.authentication.passwd }}
+    {{$v.username}}:{{$v.password}}
+  {{- end }}
+
+{{- end -}}

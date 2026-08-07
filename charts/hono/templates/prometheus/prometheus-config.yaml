@@ -1,0 +1,80 @@
+{{- if .Values.prometheus.createInstance }}
+#
+# Copyright (c) 2019, 2023 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0
+#
+# SPDX-License-Identifier: EPL-2.0
+#
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- /* prometheus chart expects metadata.name to be "{ReleaseName}-{prometheus.server.configMapOverrideName}" */}}
+  {{- /* letting this name be created via the combination "{$args.Values.fullnameOverride}-{$args.name}" */}}
+  {{- $prometheusDotScope := dict "Release" .Release "Chart" .Chart "Values" (dict "fullnameOverride" .Release.Name) }}
+  {{- $args := dict "dot" $prometheusDotScope "component" "metrics" "name" .Values.prometheus.server.configMapOverrideName }}
+  {{- include "hono.metadata" $args | nindent 2 }}
+data:
+  rules: |
+    {{ "" }}
+  alerts: |
+    {{ "" }}
+  prometheus.yml: |
+    global:
+      {{- .Values.prometheus.server.global | toYaml | nindent 6 }}
+    rule_files:
+    - /etc/config/rules
+    - /etc/config/alerts
+
+    scrape_configs:
+        # Example scrape config for pods
+        #
+        # The relabeling allows the actual pod scrape endpoint to be configured via the
+        # following annotations:
+        #
+        # * `prometheus.io/scrape`: Only scrape pods that have a value of `true`
+        # * `prometheus.io/path`: If the metrics path is not `/metrics` override this.
+        # * `prometheus.io/port`: Scrape the pod on the indicated port instead of the default of `9102`.
+        # * `prometheus.io/scheme`: Scrape the pod using the indicated scheme instead of the default of `https`.
+      - job_name: 'hono-pods'
+        kubernetes_sd_configs:
+        - role: pod
+          # make sure to only scrape pods of this release
+          namespaces:
+            names:
+            - {{ .Release.Namespace }}
+          selectors:
+          - role: pod
+            label: {{ printf "app.kubernetes.io/instance=%s,helm.sh/chart=%s" .Release.Name ( include "hono.chart" . ) }}
+
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scheme]
+            action: replace
+            target_label: __scheme__
+            regex: (.+)
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+{{ end }}

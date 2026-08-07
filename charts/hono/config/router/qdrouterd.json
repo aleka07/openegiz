@@ -1,0 +1,176 @@
+[
+  ["router", {
+    "id": "{{ include "hono.fullname" . }}.Example.Router",
+    "mode": "standalone",
+    "workerThreads": 3
+  }],
+
+  ["sslProfile", {
+    "name": "auth-server-profile",
+    "protocols": "TLSv1.2",
+    "caCertFile": "{{ .Values.amqpMessagingNetworkExample.dispatchRouter.serverTrustStore }}"
+  }],
+
+  ["authServicePlugin", {
+    "name": "Hono Auth",
+    "host": "{{ include "hono.fullname" . }}-service-auth",
+    "port": 5671,
+    "sslProfile": "auth-server-profile"
+  }],
+
+  ["sslProfile", {
+    "name": "server",
+    "protocols": "TLSv1.2",
+    "certFile": "{{ .Values.amqpMessagingNetworkExample.dispatchRouter.certFile }}",
+    "privateKeyFile": "{{ .Values.amqpMessagingNetworkExample.dispatchRouter.keyFile }}"
+  }],
+
+  ["listener", {
+    "sslProfile": "server",
+    "requireSsl": true,
+    "host": "0.0.0.0",
+    "port": 5671,
+    "linkCapacity": 100,
+    "authenticatePeer": true,
+    "saslMechanisms": "PLAIN",
+    "saslPlugin": "Hono Auth"
+  }],
+
+{{- if .Values.amqpMessagingNetworkExample.insecurePortEnabled }}
+  ["listener", {
+    "host": "0.0.0.0",
+    "port": 5672,
+    "linkCapacity": 100,
+    "authenticatePeer": true,
+    "saslMechanisms": "PLAIN",
+    "saslPlugin": "Hono Auth"
+  }],
+{{- end }}
+
+  ["sslProfile", {
+    "name": "internal",
+    "protocols": "TLSv1.2",
+    "caCertFile": "{{ .Values.amqpMessagingNetworkExample.dispatchRouter.trustStore }}",
+    "certFile": "{{ .Values.amqpMessagingNetworkExample.dispatchRouter.certFile }}",
+    "privateKeyFile": "{{ .Values.amqpMessagingNetworkExample.dispatchRouter.keyFile }}",
+    "uidFormat": "{{ .Values.amqpMessagingNetworkExample.dispatchRouter.uidFormat }}"
+  }],
+
+  ["listener", {
+    "sslProfile": "internal",
+    "requireSsl": true,
+    "host": "0.0.0.0",
+    "port": 5673,
+    "linkCapacity": 100,
+    "authenticatePeer": true,
+    "saslMechanisms": "EXTERNAL"
+  }],
+
+  ["listener", {
+    "host": "0.0.0.0",
+    "port": 8088,
+    "http": true
+  }],
+
+  ["sslProfile", {
+    "name": "broker-profile",
+    {{- if not .Values.amqpMessagingNetworkExample.broker.servicebus.host }}
+    "caCertFile": "{{ .Values.amqpMessagingNetworkExample.dispatchRouter.serverTrustStore }}",
+    {{- end }}
+    "protocols": "TLSv1.2"
+  }],
+
+  ["connector", {
+    "name": "broker-connection",
+    "sslProfile": "broker-profile",
+    "role": "route-container",
+    "port": {{ .Values.amqpMessagingNetworkExample.broker.port }},
+    "saslMechanisms": "PLAIN",
+    "saslUsername": "{{ .Values.amqpMessagingNetworkExample.broker.saslUsername }}",
+    "saslPassword": "file:/opt/hono/config/broker-password",
+    {{- if .Values.amqpMessagingNetworkExample.broker.servicebus.host }}
+    "host": "{{ .Values.amqpMessagingNetworkExample.broker.servicebus.host }}",
+    "idleTimeoutSeconds": 120
+    {{- else }}
+    "host": "{{ include "hono.fullname" . }}-artemis",
+    "verifyHostname": false
+    {{- end }}
+  }],
+
+  ["linkRoute", {
+    "prefix": "event/",
+    "direction": "in",
+    {{- if .Values.amqpMessagingNetworkExample.broker.servicebus.host }}
+    "delExternalPrefix": "event/",
+    {{- end }}
+    "connection": "broker-connection"
+  }],
+
+  ["linkRoute", {
+    "prefix": "event/",
+    "direction": "out",
+    {{- if .Values.amqpMessagingNetworkExample.broker.servicebus.host }}
+    "delExternalPrefix": "event/",
+    {{- end }}
+    "connection": "broker-connection"
+  }],
+
+  ["address", {
+    "prefix": "telemetry/",
+    "distribution": "balanced"
+  }],
+
+  ["address", {
+    "prefix": "event/",
+    "distribution": "balanced"
+  }],
+
+  ["address", {
+    "prefix": "notification/",
+    "distribution": "multicast"
+  }],
+
+  ["policy", {
+    "maxConnections": 1000,
+    "enableVhostPolicy": true,
+    "defaultVhost": "hono"
+  }],
+
+  ["vhost", {
+      "hostname": "hono",
+      "maxConnections": 500,
+      "maxConnectionsPerUser": 20,
+      "maxConnectionsPerHost": 10,
+      "allowUnknownUser": true,
+      "groups": {
+        "$default": {
+          "remoteHosts": "*",
+          "maxSessionWindow": 3276800,
+          "maxSessions": 10
+        }
+      }
+  }],
+
+  ["vhost", {
+      "hostname": "hono-internal",
+      "maxConnections": 50,
+      "groups": {
+        "Adapters": {
+          "users": "{{ .Values.amqpMessagingNetworkExample.dispatchRouter.adapterUids }}",
+          "remoteHosts": "*",
+          "maxSessions": 4,
+          "maxSessionWindow": 8192000,
+          "maxMessageSize": 131072,
+          "allowUserIdProxy": true,
+          "allowAnonymousSender": true,
+          "sources": "command_internal/*, command/*, notification/*",
+          "targets": "telemetry/*, event/*, command_internal/*, command_response/*, notification/*"
+        }
+      }
+  }],
+
+  ["log", {
+    "module": "DEFAULT",
+    "enable": "info+"
+  }]
+]

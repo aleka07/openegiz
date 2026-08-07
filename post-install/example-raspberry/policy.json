@@ -1,0 +1,73 @@
+{
+    "policyId": "example:very_insecure_policy",
+    "entries": {
+        "DEFAULT": {
+            "subjects": {
+                {{ printf "\"{{ request:subjectId }}\"" }}: {
+                    
+                    "type": "Ditto user authenticated via nginx"
+                },
+                "pre-authenticated:kafkaml-connection": {
+                    "type": "Connection to KafkaML"
+                },
+                "pre-authenticated:hono-connection": {
+                    "type": "Connection to Eclipse Hono"
+                }
+            },
+            "resources": {
+                "policy:/": {
+                    "grant": [
+                        "READ",
+                        "WRITE"
+                    ],
+                    "revoke": []
+                },
+                "thing:/": {
+                    "grant": [
+                        "READ",
+                        "WRITE"
+                    ],
+                    "revoke": []
+                },
+                "message:/": {
+                    "grant": [
+                        "READ",
+                        "WRITE"
+                    ],
+                    "revoke": []
+                }
+            }
+        },
+        "VERY_INSECURE_MQTT": {
+            "subjects": {
+                "pre-authenticated:insecure-external-hiveml": {
+                    "type": "Connection with HiveMQ PUBLIC MQTT"
+                }
+            },
+            "resources": {
+                "policy:/": {
+                    "grant": [],
+                    "revoke": [
+                        "READ",
+                        "WRITE" 
+                    ]
+                },
+                "thing:/": {
+                    "grant": [
+                        "WRITE"
+                    ],
+                    "revoke": [
+                        "READ"
+                    ]
+                },
+                "message:/": {
+                    "grant": [],
+                    "revoke": [                        
+                        "READ",
+                        "WRITE"
+                    ]
+                }
+            }
+        }
+    }
+}

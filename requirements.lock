@@ -1,0 +1,24 @@
+dependencies:
+- name: ditto
+  repository: oci://registry-1.docker.io/eclipse
+  version: 3.3.7
+- name: mongodb
+  repository: oci://registry-1.docker.io/bitnamicharts
+  version: 13.18.5
+- name: grafana
+  repository: https://grafana.github.io/helm-charts
+  version: 10.1.5
+- name: influxdb2
+  repository: https://helm.influxdata.com/
+  version: 2.1.2
+- name: telegraf
+  repository: https://helm.influxdata.com/
+  version: 1.8.66
+- name: mosquitto
+  repository: https://ertis-research.github.io/Helm-charts/
+  version: 0.3.1
+- name: hono
+  repository: https://eclipse.org/packages/charts/
+  version: 2.6.6
+digest: sha256:41a9f1e0fa50f5197c73dbb130b27c41e352d3e582a833036bc552097a457a40
+generated: "2026-01-26T18:23:44.4579643+01:00"

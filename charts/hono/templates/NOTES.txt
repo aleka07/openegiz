@@ -1,0 +1,79 @@
+Thank you for installing Eclipse Hono.
+
+Your release is named '{{ .Release.Name }}'.
+
+It might take some time for all of Hono's services to start up.
+You can check the current status by issuing the following command:
+{{ if ( eq .Release.Namespace "default" ) }}
+  $ kubectl get pods
+{{- else }}
+  $ kubectl get -n {{ .Release.Namespace }} pods
+{{- end }}
+
+The output should look similar to this:
+
+NAME                                       {{ "READY   STATUS    RESTARTS   AGE" | indent ( len .Release.Name ) }}
+{{- if .Values.adapters.amqp.enabled }}
+{{ include "hono.fullname" . }}-adapter-amqp-65cfb4d675-g5wn4             1/1     Running   0          5m50s
+{{- end }}
+{{- if .Values.adapters.coap.enabled }}
+{{ include "hono.fullname" . }}-adapter-coap-786b784f47-qx9tg             1/1     Running   0          5m51s
+{{- end }}
+{{- if .Values.adapters.http.enabled }}
+{{ include "hono.fullname" . }}-adapter-http-66bd6bb89c-mng5t             1/1     Running   0          5m51s
+{{- end }}
+{{- if .Values.adapters.lora.enabled }}
+{{ include "hono.fullname" . }}-adapter-lora-341fca588c-1hl8n             1/1     Running   0          5m51s
+{{- end }}
+{{- if .Values.adapters.mqtt.enabled }}
+{{ include "hono.fullname" . }}-adapter-mqtt-765fcd578b-5rl7n             1/1     Running   0          5m51s
+{{- end }}
+{{- if ( has "amqp" .Values.messagingNetworkTypes ) }}
+{{ include "hono.fullname" . }}-artemis-f8f7dc7f4-864cj                   1/1     Running   0          5m51s
+{{ include "hono.fullname" . }}-dispatch-router-6c77dc78bd-hjn4l          1/1     Running   0          5m51s
+{{- end }}
+{{- if ( has "kafka" .Values.messagingNetworkTypes ) }}
+{{ include "hono.fullname" . }}-kafka-controller-0                        1/1     Running   0          5m51s
+{{- end }}
+{{- if all .Values.deviceRegistryExample.enabled ( eq .Values.deviceRegistryExample.type "mongodb" ) }}
+{{ include "hono.fullname" . }}-monogodb-server-77ffb85c97-78554          1/1     Running   0          5m51s
+{{- end }}
+{{ include "hono.fullname" . }}-service-auth-84d9695cfc-5wlfh             1/1     Running   0          5m51s
+{{ include "hono.fullname" . }}-service-command-router-687fd4fbcf-7527b   1/1     Running   0          5m51s
+{{- if .Values.deviceRegistryExample.enabled }}
+{{- if eq .Values.deviceRegistryExample.type "embedded" }}
+{{ include "hono.fullname" . }}-service-device-registry-0                 1/1     Running   0          5m51s
+{{- else }}
+{{ include "hono.fullname" . }}-service-device-registry-64d645dd9c-q9c5q  1/1     Running   0          5m51s
+{{- end }}
+{{- end }}
+
+Once all pods have reached the READY state, you can start using Hono.
+
+To learn more about Hono's functionality, you should follow the Getting started guide at
+https://eclipse.dev/hono/docs/getting-started/
+
+{{- if ( has "kafka" .Values.messagingNetworkTypes ) }}
+{{- if .Values.kafkaMessagingClusterExample.enabled }}
+{{- $isKafkaTlsEnabled := ( eq .Values.kafka.listeners.external.protocol "SASL_SSL" ) }}
+Hono is configured with an example Kafka cluster for messaging. Clients can connect to the
+example Kafka cluster using the configuration properties below.
+Please refer to the guide mentioned above for details on how to determine the values for
+$KAFKA_IP{{ if $isKafkaTlsEnabled }} and $KAFKA_TRUSTSTORE_PATH{{ end }}.
+
+  bootstrap.servers=$KAFKA_IP:{{ .Values.kafka.externalAccess.controller.service.ports.external }}
+  sasl.mechanism=SCRAM-SHA-512
+  sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="{{ first .Values.kafka.sasl.client.users }}" password="{{ first .Values.kafka.sasl.client.passwords }}";
+{{- if $isKafkaTlsEnabled }}
+  security.protocol=SASL_SSL
+  ssl.endpoint.identification.algorithm=""
+  ssl.truststore.location=$KAFKA_TRUSTSTORE_PATH
+  ssl.truststore.type=PEM
+{{- else }}
+  security.protocol=SASL_PLAINTEXT
+{{- end }}
+{{- end }}
+{{- end }}
+
+Enjoy :-)
+

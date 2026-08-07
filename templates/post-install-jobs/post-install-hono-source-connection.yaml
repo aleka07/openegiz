@@ -1,0 +1,55 @@
+{{- if and .Values.hono.enabled .Values.ditto.enabled .Values.connections.ditto.source.hono.enabled }}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Name }}-post-install-hono-connection"
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+  annotations:
+    # Esto es lo que define este recurso como un gancho. Sin esta línea, 
+    # el trabajo se considera parte del release.
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    metadata:
+      name: "{{ .Release.Name }}-post-install-hono-connection"
+      labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: "post-install-hono-connection"
+        image: "curlimages/curl:8.2.1"
+        command:
+        - /bin/sh
+        - -c
+        - |
+          cp /var/run/opentwins/hono-connection-data/* /tmp/
+          chmod +x /tmp/hono-source-connection.sh
+          cd /tmp
+          ./hono-source-connection.sh
+        volumeMounts:
+        - name: hono-connection-data
+          mountPath: "/var/run/opentwins/hono-connection-data"
+          readOnly: true
+        - name: ditto-gw-users
+          mountPath: "/var/run/opentwins/ditto-gw-users"
+          readOnly: true
+      volumes:
+      - name: hono-connection-data
+        secret:
+          secretName: {{ printf "%s-%s" .Release.Name "hono-connection-data" }}
+          defaultMode: 0555
+      - name: ditto-gw-users
+        secret:
+          secretName: {{ printf "%s-%s" ( include "opentwins.ditto.fullname" . ) "gateway-secret" }}
+
+{{- end }}

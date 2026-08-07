@@ -1,0 +1,29 @@
+{{- if and .Values.kafkaml.enabled }}
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-kafkaml-sa
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-kafkaml-role
+rules:
+- apiGroups: ["", "apps", "batch"]
+  resources: ["deployments", "jobs", "pods", "replicasets", "services", "replicationcontrollers"]
+  verbs: ["create", "get", "list", "delete", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-kafkaml-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Release.Name }}-kafkaml-role
+subjects:
+- kind: ServiceAccount
+  name: {{ .Release.Name }}-kafkaml-sa
+
+{{- end }}

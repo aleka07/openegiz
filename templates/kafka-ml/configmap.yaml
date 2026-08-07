@@ -1,0 +1,38 @@
+{{- if and .Values.kafkaml.enabled }}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-kafkaml-configmap
+data:
+  brokers: {{ .Values.kafkaml.brokers | default (printf "%s-cluster-kafka-bootstrap:9092" .Release.Name) | quote }}
+  debug: {{ .Values.kafkaml.debug | quote }}
+  
+  # Internal URLs using helpers
+  backend.address: {{ include "kafkaml.fullname" (dict "Release" .Release "Component" "backend") }}:8000
+  backend.url: http://{{ include "kafkaml.fullname" (dict "Release" .Release "Component" "backend") }}:8000
+  backend.allowedhosts: {{ printf "%s,%s" .Values.kafkaml.config.backendAllowedHosts (include "kafkaml.fullname" (dict "Release" .Release "Component" "backend")) | quote }}
+  
+  control.topic: {{ .Values.kafkaml.config.controlTopic | quote }}
+  federated.modelloggertopic: {{ .Values.kafkaml.config.modelLoggerTopic | quote }}
+  frontend.url: {{ .Values.kafkaml.config.frontendUrl | quote }}
+
+  pthexecutor.url: http://{{ include "kafkaml.fullname" (dict "Release" .Release "Component" "pthexecutor") }}:8002/
+  tfexecutor.url: http://{{ include "kafkaml.fullname" (dict "Release" .Release "Component" "tfexecutor") }}:8001/
+
+  pytorch.inference.image: {{ printf "%s/kafka-ml-pytorch_model_inference:%s" .Values.kafkaml.image.repository .Values.kafkaml.image.tag }}
+  pytorch.training.image: {{ printf "%s/kafka-ml-pytorch_model_training:%s" .Values.kafkaml.image.repository .Values.kafkaml.image.tag }}
+  tensorflow.inference.image: {{ printf "%s/kafka-ml-tensorflow_model_inference:%s" .Values.kafkaml.image.repository .Values.kafkaml.image.tag }}
+  tensorflow.training.image: {{ printf "%s/kafka-ml-tensorflow_model_training:%s" .Values.kafkaml.image.repository .Values.kafkaml.image.tag }}
+
+  fedml.blockchain.enable: {{ .Values.kafkaml.blockchain.enable | quote }}
+  fedml.blockchain.rpc-url: {{ .Values.kafkaml.blockchain.rpcUrl | quote }}
+  fedml.blockchain.chain-id: {{ .Values.kafkaml.blockchain.chainId | quote }}
+  fedml.blockchain.network-id: {{ .Values.kafkaml.blockchain.networkId | quote }}
+  fedml.blockchain.wallet-address: {{ .Values.kafkaml.blockchain.walletAddress | quote }}
+  fedml.blockchain.wallet-key: {{ .Values.kafkaml.blockchain.walletKey | quote }}
+  fedml.blockchain.blockscout-url: {{ .Values.kafkaml.blockchain.blockscoutUrl | quote }}
+  fedml.blockchain.token-name: {{ .Values.kafkaml.blockchain.tokenName | quote }}
+  fedml.blockchain.token-symbol: {{ .Values.kafkaml.blockchain.tokenSymbol | quote }}
+
+{{- end }}

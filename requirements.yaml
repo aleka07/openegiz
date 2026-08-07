@@ -1,0 +1,50 @@
+dependencies:
+  - name: ditto
+    version: 3.3.7
+    repository: "oci://registry-1.docker.io/eclipse"
+    condition: ditto.enabled
+    tags:
+      - ditto
+      - essencial
+  - name: mongodb
+    version: ~13.18.5
+    repository: "oci://registry-1.docker.io/bitnamicharts"
+    condition: mongodb.enabled
+    tags:
+      - mongodb
+      - essencial
+  - name: grafana
+    version: ~10.1.2
+    repository: "https://grafana.github.io/helm-charts"
+    condition: grafana.enabled
+    tags:
+      - grafana
+      - essencial
+  - name: influxdb2
+    version: ~2.1.1
+    repository: "https://helm.influxdata.com/"
+    condition: influxdb2.enabled
+    tags:
+      - influxdb2
+      - essencial
+  - name: telegraf
+    version: ^1.8.27
+    repository: "https://helm.influxdata.com/"
+    condition: telegraf.enabled
+    tags:
+      - telegraf
+      - essencial
+  - name: mosquitto
+    version: ~0.3.1
+    repository: "https://ertis-research.github.io/Helm-charts/"
+    condition: mosquitto.enabled 
+    tags:
+      - mosquitto
+      - essencial
+  - name: hono
+    version: ^2.5.5
+    repository: "https://eclipse.org/packages/charts/"
+    condition: hono.enabled
+    tags:
+      - hono
+      - essencial

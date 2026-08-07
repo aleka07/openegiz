@@ -1,0 +1,74 @@
+{{- $amqpEnabled := and ( has "amqp" .Values.messagingNetworkTypes ) .Values.amqpMessagingNetworkExample.enabled -}}
+{{- if $amqpEnabled }}
+#
+# Copyright (c) 2019, 2022 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0
+#
+# SPDX-License-Identifier: EPL-2.0
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- $args := dict "dot" . "component" "amqp-messaging-network-router" "name" "dispatch-router" "componentConfig" .Values.amqpMessagingNetworkExample.dispatchRouter }}
+  {{- include "hono.metadata" $args | nindent 2 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "hono.matchLabels" $args | nindent 6 }}
+  template:
+    metadata:
+      {{- include "hono.metadata" $args | nindent 6 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "hono.pod.priorityClassName" $args | nindent 6 }}
+      {{- include "hono.pod.affinity" $args | nindent 6 }}
+      containers:
+      - name: apache-qpid-dispatch-router
+        image: {{ .Values.amqpMessagingNetworkExample.dispatchRouter.imageName | quote }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - /sbin/qdrouterd
+        - -c
+        - {{ .Values.amqpMessagingNetworkExample.dispatchRouter.configPath }}
+        env:
+        - name: KUBERNETES_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        ports:
+        - name: amqps
+          containerPort: 5671
+          protocol: TCP
+        {{- if .Values.amqpMessagingNetworkExample.insecurePortEnabled }}
+        - name: amqp
+          containerPort: 5672
+          protocol: TCP
+        {{- end }}
+        - name: internal
+          containerPort: 5673
+          protocol: TCP
+        - name: health
+          containerPort: {{ include "hono.healthCheckPort" . }}
+          protocol: TCP
+        {{- with .Values.amqpMessagingNetworkExample.dispatchRouter.resources }}
+        resources:
+          {{- . | toYaml | nindent 10 }}
+        {{- end }}
+        {{- include "hono.component.healthChecks" $args | nindent 8 }}
+        securityContext:
+          privileged: false
+        volumeMounts:
+        {{- include "hono.container.volumeMounts" ( dict "name" $args.name "componentConfig" $args.componentConfig ) | indent 8 }}
+      volumes:
+      {{- include "hono.pod.volumes" $args | indent 6 }}
+{{- end }}

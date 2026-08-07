@@ -1,0 +1,16 @@
+{{- if and .Values.influxdb2.enabled .Values.persistentVolumes.influxdb2 }}
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-opentwins-influxdb
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 50Gi
+  accessModes:
+  - ReadWriteOnce
+  hostPath:
+    path: /ot-platform/influxdb
+
+{{- end }}

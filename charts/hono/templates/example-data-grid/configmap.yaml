@@ -1,0 +1,28 @@
+{{- if .Values.dataGridExample.enabled }}
+#
+# Copyright (c) 2019, 2020 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0
+#
+# SPDX-License-Identifier: EPL-2.0
+#
+{{- $args := dict "dot" . "component" "data-grid" "name" "data-grid-conf" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  {{- include "hono.metadata" $args | nindent 2 }}
+data:
+  hono-data-grid.xml: |
+    {{- tpl ( .Files.Get "config/infinispan/hono-data-grid.xml" ) . | nindent 4 }}
+  users.properties: |
+    {{ printf "%s=%s" .Values.dataGridExample.authUsername .Values.dataGridExample.authPassword }}
+  public-groups.properties: |
+    {{ printf "%s=adapter" .Values.dataGridExample.authUsername }}
+  mgmt-groups.properties: |
+    {{ printf "%s=admin" .Values.dataGridExample.authUsername }}
+{{- end }}

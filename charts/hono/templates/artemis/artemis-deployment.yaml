@@ -1,0 +1,85 @@
+{{- $amqpEnabled := and ( has "amqp" .Values.messagingNetworkTypes ) .Values.amqpMessagingNetworkExample.enabled -}}
+{{- if and $amqpEnabled ( not .Values.amqpMessagingNetworkExample.broker.servicebus.host ) }}
+#
+# Copyright (c) 2019, 2022 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0
+#
+# SPDX-License-Identifier: EPL-2.0
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  {{- $args := dict "dot" . "component" "amqp-messaging-network-broker" "name" "artemis" "componentConfig" .Values.amqpMessagingNetworkExample.broker.artemis "configMountPath" "/opt/amq/conf" }}
+  {{- include "hono.metadata" $args | nindent 2 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "hono.matchLabels" $args | nindent 6 }}
+  template:
+    metadata:
+      {{- include "hono.metadata" $args | nindent 6 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- include "hono.pod.priorityClassName" $args | nindent 6 }}
+      {{- include "hono.pod.affinity" $args | nindent 6 }}
+      containers:
+      - name: apache-activemq-artemis
+        image: {{ .Values.amqpMessagingNetworkExample.broker.artemis.imageName | quote }}
+        command:
+        - "/bin/bash"
+        - "/opt/amq/conf/launch.sh"
+        env:
+        - name: AMQ_NAME
+          value: hono-broker
+        - name: AMQ_USER
+          value: admin
+        - name: AMQ_PASSWORD
+          value: admin
+        - name: HOME
+          value: /home/jboss
+        - name: JAVA_INITIAL_MEM_RATIO
+          value: "30"
+        - name: JAVA_MAX_MEM_RATIO
+          value: "70"
+        - name: KUBERNETES_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        ports:
+        - name: amqps
+          containerPort: 5671
+          protocol: TCP
+        imagePullPolicy: IfNotPresent
+        {{- with .Values.amqpMessagingNetworkExample.broker.artemis.resources }}
+        resources:
+          {{- . | toYaml | nindent 10 }}
+        {{- end }}
+        livenessProbe:
+          initialDelaySeconds: {{ $args.componentConfig.probes.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ $args.componentConfig.probes.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ $args.componentConfig.probes.livenessProbe.timeoutSeconds }}
+          tcpSocket:
+            port: 8161
+        readinessProbe:
+          initialDelaySeconds: {{ $args.componentConfig.probes.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ $args.componentConfig.probes.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ $args.componentConfig.probes.readinessProbe.timeoutSeconds }}
+          tcpSocket:
+            port: 8161
+        securityContext:
+          privileged: false
+        volumeMounts:
+        {{- include "hono.container.volumeMounts" $args | indent 8 }}
+      volumes:
+      {{- include "hono.pod.volumes" $args | indent 6 }}
+{{- end }}

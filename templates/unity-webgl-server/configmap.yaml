@@ -1,0 +1,44 @@
+{{- if .Values.unityWebglServer.enabled }}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-unity-webgl-nginx-config
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+data:
+  default.conf: |
+    server {
+      listen 80;
+      server_name _;
+
+      include /etc/nginx/mime.types;
+
+      root /usr/share/nginx/html;
+      index index.html;
+
+      # CORS headers for Grafana Unity panel
+      add_header Access-Control-Allow-Origin * always;
+      add_header Access-Control-Allow-Methods 'GET, OPTIONS' always;
+      add_header Access-Control-Allow-Headers '*' always;
+
+      # Disable caching so updated builds always load
+      add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+      etag off;
+      if_modified_since off;
+
+      # Unity .data files
+      location ~* \.data$ {
+        types { }
+        default_type application/octet-stream;
+      }
+
+      location / {
+        try_files $uri $uri/ =404;
+      }
+    }
+
+{{- end }}
