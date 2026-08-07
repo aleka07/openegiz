@@ -3,7 +3,7 @@
 
 RELEASE_NAME="${1:-openegiz}"
 
-POD=$(kubectl get pods -l "app.kubernetes.io/name=${RELEASE_NAME}-unity-webgl-server" -o jsonpath='{.items[0].metadata.name}')
+POD=$(kubectl get pods -n "${NAMESPACE:-opentwins}" -l "app.kubernetes.io/name=${RELEASE_NAME}-unity-webgl-server" -o jsonpath='{.items[0].metadata.name}')
 NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
 
 if [ -z "$POD" ]; then
@@ -18,7 +18,7 @@ for f in ./build/*; do
     [ -f "$f" ] || continue
     name=$(basename "$f")
     echo "  Uploading: $name"
-    kubectl cp "$f" "$POD:/usr/share/nginx/html/build/$name"
+    kubectl cp -n "${NAMESPACE:-opentwins}" "$f" "$POD:/usr/share/nginx/html/build/$name"
 done
 
 echo ""

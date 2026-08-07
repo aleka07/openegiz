@@ -1,23 +1,27 @@
 .PHONY: install uninstall status endpoints upgrade upload-build generate-data copy-build
 
-RELEASE_NAME := openegiz
+# Several values reference names derived from the release name (e.g. the
+# telegraf configmap), so the release MUST be called "opentwins" until those
+# references are made release-agnostic.
+RELEASE_NAME := opentwins
+NAMESPACE    := opentwins
 CHART_PATH   := .
 
 ## Install the OpenEgiz Helm chart
 install:
-	helm install $(RELEASE_NAME) $(CHART_PATH) --wait --timeout=15m --debug
+	helm install $(RELEASE_NAME) $(CHART_PATH) -n $(NAMESPACE) --create-namespace --wait --timeout=15m --debug
 
 ## Upgrade the OpenEgiz Helm chart
 upgrade:
-	helm upgrade $(RELEASE_NAME) $(CHART_PATH) --wait --timeout=15m --debug
+	helm upgrade $(RELEASE_NAME) $(CHART_PATH) -n $(NAMESPACE) --wait --timeout=15m --debug
 
 ## Uninstall the OpenEgiz Helm chart
 uninstall:
-	helm uninstall $(RELEASE_NAME) --wait
+	helm uninstall $(RELEASE_NAME) -n $(NAMESPACE) --wait
 
 ## Show pod statuses
 status:
-	@kubectl get pods -o wide
+	@kubectl get pods -n $(NAMESPACE) -o wide
 
 ## Show all service endpoints (IP + port)
 endpoints:

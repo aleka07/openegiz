@@ -31,17 +31,15 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parent.parent
-LOGO_SRC = REPO_ROOT / "openegiz_logo_centered.svg"
+# openegiz_logo_dark.svg is the dark-theme variant of openegiz_logo_centered.svg:
+# same artwork with light text and brightened gradients (the original navy
+# wordmark is unreadable on Grafana's dark theme), and the viewBox already
+# tightened to the ink bounds (160 632 1282 336) -- no transform needed here.
+LOGO_SRC = REPO_ROOT / "openegiz_logo_dark.svg"
+LOGO_EXPECT = b'viewBox="160 632 1282 336"'
 
 APP_ZIP = "ertis-opentwins-app.zip"
 UNITY_ZIP = "ertis-unity-panel.zip"
-
-# openegiz_logo_centered.svg is a 1600x1600 canvas whose ink only spans
-# (180,652)-(1422,948) -- ~85% empty margin, which renders as an invisible smudge
-# in a Grafana icon slot. Tighten the viewBox to the measured bounds plus 20u of
-# padding. Same artwork, nothing else changed.
-LOGO_VIEWBOX_FROM = b'<svg width="1600" height="1600" viewBox="0 0 1600 1600"'
-LOGO_VIEWBOX_TO = b'<svg width="1282" height="336" viewBox="160 632 1282 336"'
 
 
 class PatchError(RuntimeError):
@@ -66,7 +64,12 @@ def build_logo() -> bytes:
     if not LOGO_SRC.exists():
         raise PatchError(f"logo not found: {LOGO_SRC}")
     svg = LOGO_SRC.read_bytes()
-    return sub_once(svg, LOGO_VIEWBOX_FROM, LOGO_VIEWBOX_TO, LOGO_SRC.name)
+    if svg.count(LOGO_EXPECT) != 1:
+        raise PatchError(
+            f"{LOGO_SRC.name}: expected pre-tightened viewBox {LOGO_EXPECT!r}; "
+            "the file changed - re-measure the ink bounds."
+        )
+    return svg
 
 
 # --------------------------------------------------------------------------
