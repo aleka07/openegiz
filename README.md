@@ -55,7 +55,7 @@ Default credentials (LAN use only — change before any real deployment): Grafan
 
 1. Open Grafana (`make endpoints` shows the URL) and log in
 2. Open the **OpenEgiz** app in the left sidebar → **Twins** → **New twin**
-3. Set **Namespace** `org.openegiz`, **ID** `oven-01`, strategy **From scratch**, **Policy ID** `default:basic-policy`, **Name** `Oven 1`
+3. Set **Namespace** `org.openegiz`, **ID** `oven-01`, strategy **From scratch**, **Policy ID** `default:basic_policy`, **Name** `Oven 1`
 4. Add 4 features: `voltage_v`, `current_a`, `active_power_kw`, `power_factor`
 5. Repeat for `oven-02` / `Oven 2`
 
