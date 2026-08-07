@@ -7,11 +7,23 @@
       "step": 1,
       "role": "Замес теста",
       "capacity": 1,
-      "nominal_duration_min": 8
+      "nominal_duration_min": 8,
+      "_isType": false,
+      "name": "Тестомес №1"
     },
     "features": {
-      "motor_load": { "properties": { "value": 0, "unit": "%" } },
-      "dough_temp": { "properties": { "value": 0, "unit": "degC" } }
+      "motor_load": {
+        "properties": {
+          "value": 0,
+          "unit": "%"
+        }
+      },
+      "dough_temp": {
+        "properties": {
+          "value": 0,
+          "unit": "degC"
+        }
+      }
     }
   },
   "bakery:proofer-1": {
@@ -22,11 +34,23 @@
       "step": 2,
       "role": "Расстойка",
       "capacity": 3,
-      "nominal_duration_min": 40
+      "nominal_duration_min": 40,
+      "_isType": false,
+      "name": "Расстойка №1"
     },
     "features": {
-      "temp": { "properties": { "value": 0, "unit": "degC" } },
-      "humidity": { "properties": { "value": 0, "unit": "%" } }
+      "temp": {
+        "properties": {
+          "value": 0,
+          "unit": "degC"
+        }
+      },
+      "humidity": {
+        "properties": {
+          "value": 0,
+          "unit": "%"
+        }
+      }
     }
   },
   "bakery:oven-1": {
@@ -38,10 +62,17 @@
       "role": "Выпечка",
       "capacity": 1,
       "nominal_duration_min": 25,
-      "note": "bottleneck of the line"
+      "note": "bottleneck of the line",
+      "_isType": false,
+      "name": "Печь №1"
     },
     "features": {
-      "temp": { "properties": { "value": 0, "unit": "degC" } }
+      "temp": {
+        "properties": {
+          "value": 0,
+          "unit": "degC"
+        }
+      }
     }
   },
   "bakery:packer-1": {
@@ -52,10 +83,17 @@
       "step": 4,
       "role": "Упаковка",
       "capacity": 1,
-      "nominal_duration_min": 5
+      "nominal_duration_min": 5,
+      "_isType": false,
+      "name": "Упаковка №1"
     },
     "features": {
-      "throughput": { "properties": { "value": 0, "unit": "packs/min" } }
+      "throughput": {
+        "properties": {
+          "value": 0,
+          "unit": "packs/min"
+        }
+      }
     }
   },
   "bakery:line": {
@@ -63,12 +101,34 @@
     "attributes": {
       "line": "bakery-line-1",
       "role": "Линия целиком (агрегированные счётчики)",
-      "route": ["mixer-1", "proofer-1", "oven-1", "packer-1"]
+      "route": [
+        "mixer-1",
+        "proofer-1",
+        "oven-1",
+        "packer-1"
+      ],
+      "_isType": false,
+      "name": "Линия хлебозавода"
     },
     "features": {
-      "batches_started": { "properties": { "value": 0, "unit": "count" } },
-      "batches_completed": { "properties": { "value": 0, "unit": "count" } },
-      "wip": { "properties": { "value": 0, "unit": "count" } }
+      "batches_started": {
+        "properties": {
+          "value": 0,
+          "unit": "count"
+        }
+      },
+      "batches_completed": {
+        "properties": {
+          "value": 0,
+          "unit": "count"
+        }
+      },
+      "wip": {
+        "properties": {
+          "value": 0,
+          "unit": "count"
+        }
+      }
     }
   }
 }
