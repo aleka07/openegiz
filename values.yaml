@@ -312,6 +312,27 @@ telegraf:
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
+# OpenEgiz course scenario: the virtual bakery line
+##################################################################
+# The bakery simulator (data-generator/bakery/) emits two streams. Telemetry
+# takes the normal Ditto path and needs nothing here. The process EVENT LOG
+# bypasses Ditto — an event is a fact about the process, not a device state —
+# so Telegraf needs a second mqtt_consumer to land it in its own measurement,
+# and Grafana gets a dashboard that shows both streams side by side.
+bakery:
+  eventLog:
+    enabled: true
+    topic: "bakery/events"
+    measurement: "batch_events"
+  dashboard:
+    enabled: true
+    # UID of the Grafana datasource the panels query. Grafana derives the UID
+    # of a provisioned datasource deterministically from its name, so this
+    # value is stable for the datasource named "opentwins" that
+    # cm-influxdb-grafana-datasource.yaml provisions. If you rename that
+    # datasource, read the new UID from GET /api/datasources and put it here.
+    datasourceUid: "P4528D75AB74BE2EA"
+
 
 # OpenTwins recommended values for InfluxDB2
 ##################################################################
@@ -394,6 +415,17 @@ grafana:
       enabled: true
     plugins:
       enabled: true
+    # Needed for the "Bakery Line" dashboard shipped in
+    # templates/config-maps/cm-bakery-dashboard.yaml. The sidecar picks up any
+    # ConfigMap in this namespace carrying the `grafana_dashboard` label and
+    # files it under the folder below, so new course dashboards are just new
+    # ConfigMaps — no Grafana UI clicking, no state on the PVC.
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      provider:
+        folder: "OpenEgiz"
+        allowUiUpdates: true
   extraInitContainers:
   - name: install-opentwins-plugins
     image: busybox

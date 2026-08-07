@@ -1161,3 +1161,246 @@ mcp_servers:
 4. Пароли одинаковые для всех — один общий стенд, персональных учёток нет.
 5. `connections.ditto.source.hono.password` в `values.yaml` остался дефолтным — hono
    отключён (`hono.enabled: false`), в кластере этих кредов нет.
+
+---
+
+## 2026-08-07 — Фаза 1 сквозного сценария: виртуальная пекарня (телеметрия + журнал процесса)
+
+Первый прикладной сценарий поверх стенда. До этого через платформу ходил один тестовый
+двойник с одним числом; теперь по ней идёт производственная линия из четырёх станций,
+которая одновременно генерирует **телеметрию** и **журнал событий процесса**.
+
+Ключевое архитектурное решение: это **два разных потока с разными путями**.
+
+```
+                       ┌─ telemetry/<thingId> ─▶ Ditto ─▶ opentwins/# ─┐
+simulator.py ──MQTT──▶ │  (Ditto Protocol)      (twin)                 ├─▶ Telegraf ─▶ InfluxDB
+    :30511             └─ bakery/events ─────────────────────────────  ┘
+                          (плоский JSON)
+```
+
+Событие процесса («партия batch-0007 пошла в печь») — утверждение о **партии**, а не о
+состоянии **устройства**. У партии нет двойника, и модифицировать в Ditto нечего.
+Поэтому журнал идёт мимо Ditto прямо в Telegraf, в собственный measurement.
+
+### Что добавлено
+
+| Файл | Что |
+|---|---|
+| `data-generator/bakery/simulator.py` | симулятор линии (единственная зависимость — paho-mqtt) |
+| `data-generator/bakery/twins.json` + `create_twins.sh` | пять двойников через Ditto API |
+| `data-generator/bakery/install.sh` | rsync на хост в `~/course/bakery/` + создание двойников |
+| `data-generator/bakery/check_log.py` | проверка журнала через pm4py прямо из InfluxDB |
+| `data-generator/bakery/README.md` | топология, режимы, куда что попадает |
+| `templates/config-maps/cm-telegraf.yaml` | **второй** `mqtt_consumer` на `bakery/events` |
+| `templates/config-maps/cm-bakery-dashboard.yaml` | дашборд Grafana «Bakery Line» |
+| `values.yaml` | блок `bakery:`, включён sidecar `grafana.sidecar.dashboards` |
+
+Линия: `mixer-1` (cap 1, ~8 мин) → `proofer-1` (cap 3, ~40 мин) → `oven-1` (cap 1, ~25 мин)
+→ `packer-1` (cap 1, ~5 мин), запуск партии каждые ~12 симулированных минут.
+Такт печи (25 мин/шт) вдвое хуже темпа запуска — очередь перед печью растёт всю смену.
+Расстойка длиннее по времени, но при вместимости 3 её такт 13 мин/шт, и узким местом она
+не является: «самая долгая операция» ≠ «бутылочное горлышко», и это отдельный тезис курса.
+
+### Изменение Telegraf и почему именно такое
+
+Существующий `mqtt_consumer` (`opentwins/#`, `json_v2`) **не тронут**. Рядом добавлен
+второй вход:
+
+```toml
+[[inputs.mqtt_consumer]]
+  qos = 1
+  servers = ["tcp://opentwins-mosquitto:1883"]
+  topics = ["bakery/events"]
+  name_override = "batch_events"
+  topic_tag = ""
+  data_format = "json"
+  tag_keys = ["case_id", "activity", "station", "mode"]
+  json_string_fields = ["ts", "run_id"]
+```
+
+Обоснование:
+- `data_format = "json"`, а не `json_v2`. Событие — плоский объект, и `tag_keys` +
+  `json_string_fields` выражают ровно то, что нужно журналу (case/activity/resource в теги,
+  метка времени в поле). `json_v2` здесь дал бы только церемонию.
+- `name_override` — иначе оба входа писали бы в `mqtt_consumer` и смешали телеметрию с
+  журналом.
+- `topic_tag = ""` — тег `topic` для одного фиксированного топика бесполезен.
+- `mode` вынесен в теги дополнительно к требуемым трём: он позволяет одним фильтром
+  отделить датасеты разных прогонов.
+
+Флаг: `.Values.bakery.eventLog.enabled` (по умолчанию `true`).
+
+**Известная особенность подтвердилась:** у configmap Telegraf нет checksum-аннотации,
+поэтому `helm upgrade` под не перезапускает. После апгрейда нужен
+`kubectl rollout restart deploy/opentwins-telegraf -n opentwins`. В логе после рестарта:
+`I! Loaded inputs: mqtt_consumer (2x)` и два `Connected [tcp://opentwins-mosquitto:1883]`.
+
+### Дашборд
+
+Провижининг тем же способом, что и datasource: configmap с меткой sidecar'а. Пришлось
+**включить** `grafana.sidecar.dashboards` — он был выключен, поэтому третьего sidecar'а в
+поде не было (`helm upgrade` пересоздал под, стало 4/4). Папка — `OpenEgiz`
+(`sidecar.dashboards.provider.folder`).
+
+UID datasource (`P4528D75AB74BE2EA`) вынесен в `values.yaml` как
+`bakery.dashboard.datasourceUid`. Grafana выводит UID провижинированного datasource
+детерминированно из его имени, поэтому значение стабильно для datasource с именем
+`opentwins`; при переименовании — взять новый из `GET /api/datasources`.
+
+11 панелей: 4 stat (запущено / завершено / WIP / температура печи сейчас), таймсерии по
+всем четырём станциям, счётчики линии, bar chart по операциям журнала и таблица самого
+журнала событий.
+
+### Развёртывание
+
+```bash
+rsync -az --delete --exclude .git ./ vpn-gx10-11:openegiz-deploy/chart/
+ssh vpn-gx10-11 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml; \
+  helm upgrade opentwins ~/openegiz-deploy/chart -n opentwins \
+    -f ~/openegiz-deploy/secrets.values.yaml --wait --timeout=15m'
+ssh vpn-gx10-11 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml; \
+  kubectl rollout restart deploy/opentwins-telegraf -n opentwins'
+bash data-generator/bakery/install.sh
+```
+
+Revision 7. `--delete` в rsync снёс `build/` в копии чарта на хосте (он в `.helmignore`,
+на пакет не влияет, но `scripts/upload-build.sh` его читает) — восстановлен отдельным
+rsync. На будущее: либо не давать `--delete`, либо синхронизировать `build/` вместе.
+
+### Проверка по хопам
+
+**1. Двойники.** `create_twins.sh` → 5×HTTP 201. `GET :30528/api/twins/` (источник
+Twins-страницы плагина) отдаёт все пять:
+
+```
+bakery:line      | ['batches_started', 'batches_completed', 'wip']
+bakery:mixer-1   | ['motor_load', 'dough_temp']
+bakery:oven-1    | ['temp']
+bakery:packer-1  | ['throughput']
+bakery:proofer-1 | ['temp', 'humidity']
+```
+
+**2. Прогон.** 20 партий, `--speedup 200 --telemetry-interval 1.0 --seed 42`:
+
+```
+Simulated 09:24:27 of production in 170.4s real time.
+Batches started=20 completed=20
+Events recorded=160 dropped=0 (normal mode)
+MQTT messages: telemetry=855 events=160
+  mixer-1    processed=20   still queued=0 in service=0
+  proofer-1  processed=20   still queued=0 in service=0
+  oven-1     processed=20   still queued=0 in service=0
+  packer-1   processed=20   still queued=0 in service=0
+```
+
+Очередь перед печью по ходу смены: 0 → 9. Перед остальными станциями — 0–2.
+
+**3. Двойники обновились.** `bakery:line` после прогона: `batches_started=20`,
+`batches_completed=20`, `wip=0`. `bakery:oven-1.temp` = 183.07 (остывает после последней
+выпечки; при пустой печи уставка 175 °C).
+
+**4. InfluxDB — телеметрия.** 179 точек на каждое поле `*_properties_value` по каждому из
+пяти двойников (171 из прогона + 8 от smoke-теста и создания things).
+Температура печи: min 0 (это PUT при создании двойника), max **232.74**, mean 218.9 —
+уставка выпечки 231 °C достигается, то есть кривая действительно следует за процессом.
+
+**5. InfluxDB — журнал.** По 20 записей на каждую из 8 операций, ровно 8 событий на
+партию для всех 20 партий:
+
+```
+,,0,8,batch-0001
+...
+,,0,8,batch-0020
+```
+
+**6. Grafana.** Дашборд зарегистрирован: `uid=openegiz-bakery-line`, папка `OpenEgiz`
+(`folderUid=dfugp9027vsaoa`). Панели проверены не «наличием», а реальным запросом через
+`POST /api/ds/query`: температура печи — 179 точек `[Time, Value]`, таблица журнала —
+176 строк `[_time, _value, activity, case_id, station]`, bar chart — 8 столбцов,
+счётчик завершённых партий — 223 точки.
+
+**7. pm4py на реальных данных из InfluxDB** (`check_log.py`, режим normal):
+
+```
+mode=normal  events=160  cases=20
+events per case: min=8 max=8 mean=8.00
+complete cases (8 activities): 20/20
+
+DFG: 7 edges, 1 start activities, 1 end activities
+  start: {'MixingStarted': 20}
+  end:   {'PackingDone': 20}
+
+Edges by mean duration:
+     106.5 min  ProofingDone -> BakingStarted     ◀ ожидание перед печью
+      39.1 min  ProofingStarted -> ProofingDone
+      25.7 min  BakingStarted -> BakingDone
+       8.1 min  MixingStarted -> MixingDone
+       5.1 min  MixingDone -> ProofingStarted
+       5.0 min  PackingStarted -> PackingDone
+       0.0 min  BakingDone -> PackingStarted
+
+Max observed queue length per station:
+  oven-1     max queue=  9  mean=4.17
+  proofer-1  max queue=  2  mean=0.55
+  mixer-1 / packer-1: 0
+```
+
+Идеальный DFG из 7 рёбер, одно начало, один конец. Ожидание перед печью (106.5 мин) в
+**четыре раза** больше самой выпечки (25.7 мин) — узкое место находится без подсказок.
+Побочно всплыло вторичное ожидание `MixingDone → ProofingStarted` (5.1 мин): расстойка
+периодически забита на все три места.
+
+**8. Грязный прогон.** 10 партий, `--mode dirty --seed 99 --case-start 101`: симулятор
+отчитался `recorded=68 dropped=12`, InfluxDB подтверждает 68 против 80 ожидаемых, по
+партиям 5–8 событий вместо 8, полных партий 1 из 10. pm4py на этих данных выдаёт
+спагетти: 11 рёбер вместо 7 и **три** стартовых активности вместо одной
+(`MixingStarted: 7, MixingDone: 2, ProofingStarted: 1`) — ровно тот эффект, ради которого
+режим и сделан.
+
+Режим `sparse` проверен на `--dry-run`: теряются ровно `ProofingDone` и `PackingDone`
+(2 события на партию), симуляция линии при этом не меняется.
+
+### Данные, оставленные в InfluxDB для фазы 2
+
+| Датасет | case_id | mode | Событий | Комментарий |
+|---|---|---|---|---|
+| основной | `batch-0001` .. `batch-0020` | `normal` | 160 | 20 полных партий, 8 событий на партию |
+| грязный | `batch-0101` .. `batch-0110` | `dirty` | 68 | 12 событий потеряно |
+| мусор от smoke-теста | `smoke-0001`, `smoke-0002` | `normal` | 16 | **отфильтровать по префиксу `batch-`** |
+
+Телеметрия по двойникам `bakery:*` за то же окно тоже осталась.
+
+`smoke-*` не удалены: удаление данных из InfluxDB заблокировано политикой окружения.
+Вреда нет — `check_log.py` фильтрует по `--case-prefix batch-` по умолчанию, но в
+notebook'е фазы 2 этот фильтр нужно поставить явно, иначе в лог попадут две лишние
+партии из другого прогона.
+
+Симулятор на хосте **не запущен** — он запускается вручную под демонстрацию.
+
+### Про два времени (важно для фазы 2)
+
+Точка в InfluxDB получает время **приёма** (реальное), поле `ts` — время **процесса**
+(симулированное). При `--speedup 200` смена в 9 часов прожимается в 170 секунд, поэтому:
+
+- process mining обязан брать `ts`, иначе все длительности окажутся в 200 раз меньше;
+- в Grafana смена выглядит как 3 минуты по оси времени — это не баг;
+- при сортировке событий одной партии `ts` до секунды совпадает у пар вроде
+  `MixingDone`/`ProofingStarted` (они одновременны по построению) — сортировать нужно с
+  тай-брейком по полю `seq`.
+
+### Отказы и починки
+
+1. **Лаг температуры печи был задан «на такт», а не по времени.** При `--speedup 200`
+   печь просто не успевала прогреться между отсчётами (в первом прогоне максимум был
+   159 °C при уставке 231). Заменено на апериодическое звено с постоянной времени в
+   *симулированных* минутах (`approach()`), теперь `--speedup` на физику не влияет.
+   Проверено: диапазон стал 157–245 °C.
+2. **`pivot()` в Flux не смог свести строковое поле `ts` и числовые в одну колонку**
+   (`schema collision: column "_value" is both of type string and float`). `check_log.py`
+   тянет их двумя запросами и джойнит по `_time`. Заодно всплыло, что в этой версии Flux
+   аргумент называется `valueColumn`, а не `valueColumns`.
+3. **`--range -1h` ломал argparse** (минус читается как начало ключа) — в документации и
+   примерах только `--range=-1h`.
+4. Удаление smoke-данных из InfluxDB заблокировано политикой — см. выше, обошлись
+   префиксом case_id.

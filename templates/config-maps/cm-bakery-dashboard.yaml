@@ -1,0 +1,357 @@
+{{- if and .Values.grafana.enabled .Values.bakery.dashboard.enabled (or .Values.influxdb2.enabled .Values.externalInfluxdb2) }}
+{{- $ds := .Values.bakery.dashboard.datasourceUid }}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Release.Name }}-bakery-dashboard"
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    "{{ .Values.grafana.sidecar.dashboards.label }}": ""
+data:
+  bakery-line.json: |+
+    {
+      "uid": "openegiz-bakery-line",
+      "title": "Bakery Line",
+      "tags": ["openegiz", "bakery", "course"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "editable": true,
+      "refresh": "10s",
+      "time": { "from": "now-3h", "to": "now" },
+      "panels": [
+        {
+          "type": "stat",
+          "title": "Партий запущено",
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+          "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "color": { "mode": "fixed", "fixedColor": "blue" }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "colorMode": "background",
+            "graphMode": "area",
+            "textMode": "value"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+              "query": "from(bucket: \"{{ .Values.influxdb2.adminUser.bucket }}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\" and r.thingId == \"bakery:line\" and r._field == \"value_batches_started_properties_value\")\n  |> keep(columns: [\"_time\", \"_value\"])"
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "title": "Партий завершено",
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+          "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "color": { "mode": "fixed", "fixedColor": "green" }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "colorMode": "background",
+            "graphMode": "area",
+            "textMode": "value"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+              "query": "from(bucket: \"{{ .Values.influxdb2.adminUser.bucket }}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\" and r.thingId == \"bakery:line\" and r._field == \"value_batches_completed_properties_value\")\n  |> keep(columns: [\"_time\", \"_value\"])"
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "title": "В работе на линии (WIP)",
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+          "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "color": { "mode": "fixed", "fixedColor": "orange" }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "colorMode": "background",
+            "graphMode": "area",
+            "textMode": "value"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+              "query": "from(bucket: \"{{ .Values.influxdb2.adminUser.bucket }}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\" and r.thingId == \"bakery:line\" and r._field == \"value_wip_properties_value\")\n  |> keep(columns: [\"_time\", \"_value\"])"
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "title": "Печь сейчас",
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+          "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "decimals": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "blue", "value": null },
+                  { "color": "orange", "value": 190 },
+                  { "color": "red", "value": 225 }
+                ]
+              },
+              "color": { "mode": "thresholds" }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+            "colorMode": "background",
+            "graphMode": "area",
+            "textMode": "value"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+              "query": "from(bucket: \"{{ .Values.influxdb2.adminUser.bucket }}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\" and r.thingId == \"bakery:oven-1\" and r._field == \"value_temp_properties_value\")\n  |> keep(columns: [\"_time\", \"_value\"])"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Печь oven-1 — температура (пики = идёт выпечка)",
+          "description": "Температура растёт, когда в печи партия, и падает в простое. Провалы — открытие дверцы при загрузке/выгрузке.",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 4 },
+          "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "decimals": 1,
+              "displayName": "Температура печи",
+              "color": { "mode": "fixed", "fixedColor": "red" },
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 12,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "single", "sort": "none" }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+              "query": "from(bucket: \"{{ .Values.influxdb2.adminUser.bucket }}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\" and r.thingId == \"bakery:oven-1\" and r._field == \"value_temp_properties_value\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\"])"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Замес mixer-1",
+          "gridPos": { "h": 7, "w": 8, "x": 0, "y": 12 },
+          "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 1,
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 8,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "none" }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+              "query": "from(bucket: \"{{ .Values.influxdb2.adminUser.bucket }}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\" and r.thingId == \"bakery:mixer-1\")\n  |> filter(fn: (r) => r._field == \"value_motor_load_properties_value\" or r._field == \"value_dough_temp_properties_value\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({ r with _field: if r._field == \"value_motor_load_properties_value\" then \"Нагрузка двигателя, %\" else \"Температура теста, °C\" }))\n  |> keep(columns: [\"_time\", \"_value\", \"_field\"])"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Расстойка proofer-1",
+          "gridPos": { "h": 7, "w": 8, "x": 8, "y": 12 },
+          "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 1,
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 8,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "none" }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+              "query": "from(bucket: \"{{ .Values.influxdb2.adminUser.bucket }}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\" and r.thingId == \"bakery:proofer-1\")\n  |> filter(fn: (r) => r._field == \"value_temp_properties_value\" or r._field == \"value_humidity_properties_value\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> map(fn: (r) => ({ r with _field: if r._field == \"value_temp_properties_value\" then \"Температура, °C\" else \"Влажность, %\" }))\n  |> keep(columns: [\"_time\", \"_value\", \"_field\"])"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Упаковка packer-1",
+          "gridPos": { "h": 7, "w": 8, "x": 16, "y": 12 },
+          "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+          "fieldConfig": {
+            "defaults": {
+              "decimals": 1,
+              "displayName": "Производительность, уп./мин",
+              "color": { "mode": "fixed", "fixedColor": "purple" },
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 15,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "single", "sort": "none" }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+              "query": "from(bucket: \"{{ .Values.influxdb2.adminUser.bucket }}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\" and r.thingId == \"bakery:packer-1\" and r._field == \"value_throughput_properties_value\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> keep(columns: [\"_time\", \"_value\"])"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Счётчики линии: запущено / завершено / в работе",
+          "description": "Расхождение между «запущено» и «завершено» — это незавершённое производство. Растёт, если линия не успевает.",
+          "gridPos": { "h": 7, "w": 12, "x": 0, "y": 19 },
+          "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "fillOpacity": 5,
+                "showPoints": "never",
+                "spanNulls": true
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+            "tooltip": { "mode": "multi", "sort": "none" }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+              "query": "from(bucket: \"{{ .Values.influxdb2.adminUser.bucket }}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_consumer\" and r.thingId == \"bakery:line\")\n  |> filter(fn: (r) => r._field == \"value_batches_started_properties_value\" or r._field == \"value_batches_completed_properties_value\" or r._field == \"value_wip_properties_value\")\n  |> aggregateWindow(every: v.windowPeriod, fn: max, createEmpty: false)\n  |> map(fn: (r) => ({ r with _field: if r._field == \"value_batches_started_properties_value\" then \"Запущено\" else if r._field == \"value_batches_completed_properties_value\" then \"Завершено\" else \"В работе\" }))\n  |> keep(columns: [\"_time\", \"_value\", \"_field\"])"
+            }
+          ]
+        },
+        {
+          "type": "barchart",
+          "title": "События журнала по операциям",
+          "description": "Сколько раз каждая операция зафиксирована. В режимах sparse/dirty часть столбиков заметно короче — события потеряны.",
+          "gridPos": { "h": 7, "w": 12, "x": 12, "y": 19 },
+          "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "color": { "mode": "palette-classic" },
+              "custom": { "lineWidth": 1, "fillOpacity": 80, "axisLabel": "" }
+            },
+            "overrides": []
+          },
+          "options": {
+            "xField": "activity",
+            "orientation": "horizontal",
+            "showValue": "always",
+            "legend": { "displayMode": "hidden", "placement": "bottom", "showLegend": false },
+            "tooltip": { "mode": "single", "sort": "none" }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+              "query": "from(bucket: \"{{ .Values.influxdb2.adminUser.bucket }}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"{{ .Values.bakery.eventLog.measurement }}\" and r._field == \"seq\")\n  |> group(columns: [\"activity\"])\n  |> count()\n  |> group()\n  |> rename(columns: { _value: \"Событий\" })\n  |> sort(columns: [\"activity\"])\n  |> keep(columns: [\"activity\", \"Событий\"])"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "title": "Журнал событий партий (event log)",
+          "description": "Тот самый лог, который читают pm4py и JaamSim. case_id — партия, activity — операция, ts — время процесса (симулированное).",
+          "gridPos": { "h": 11, "w": 24, "x": 0, "y": 26 },
+          "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+          "fieldConfig": {
+            "defaults": { "custom": { "align": "left", "filterable": true } },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "footer": { "show": false, "reducer": ["sum"], "fields": "" },
+            "sortBy": [{ "displayName": "Записано", "desc": true }]
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "influxdb", "uid": "{{ $ds }}" },
+              "query": "from(bucket: \"{{ .Values.influxdb2.adminUser.bucket }}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"{{ .Values.bakery.eventLog.measurement }}\" and r._field == \"ts\")\n  |> group()\n  |> sort(columns: [\"_time\"], desc: true)\n  |> limit(n: 500)\n  |> keep(columns: [\"_time\", \"case_id\", \"activity\", \"station\", \"mode\", \"_value\"])\n  |> rename(columns: { _time: \"Записано\", case_id: \"Партия\", activity: \"Операция\", station: \"Станция\", mode: \"Режим\", _value: \"Время процесса\" })"
+            }
+          ]
+        }
+      ]
+    }
+
+{{- end }}

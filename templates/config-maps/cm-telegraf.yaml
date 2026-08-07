@@ -87,6 +87,40 @@ data:
         [[inputs.mqtt_consumer.json_v2.object]]
           path = '{"value":value.features}'
           optional = true
+
+{{- if .Values.bakery.eventLog.enabled }}
+    # ---------------------------------------------------------------------
+    # Bakery process event log (OpenEgiz course addition).
+    #
+    # This is a SECOND, independent mqtt_consumer. It does NOT go through
+    # Ditto: a batch event ("MixingStarted for batch-0007") is a statement
+    # about the process, not about the state of a device, so there is no twin
+    # feature to modify. The simulator publishes it straight to mosquitto and
+    # Telegraf lands it in its own measurement.
+    #
+    # Plain `json` parser rather than `json_v2`: the payload is one flat
+    # object, and `tag_keys` + `json_string_fields` express exactly what an
+    # event log needs (case / activity / resource as tags, timestamp as a
+    # field). json_v2 would only add ceremony here.
+    #
+    # `ts` is the SIMULATED process time and is kept as a string field. The
+    # InfluxDB point time is ingestion time — with --speedup the two differ on
+    # purpose, and pm4py must read `ts`.
+    # ---------------------------------------------------------------------
+    [[inputs.mqtt_consumer]]
+      qos = 1
+      servers = [
+        "tcp://{{ include "opentwins.mosquitto.fullname" . }}:1883"
+      ]
+      topics = [
+        "{{ .Values.bakery.eventLog.topic }}"
+      ]
+      name_override = "{{ .Values.bakery.eventLog.measurement }}"
+      topic_tag = ""
+      data_format = "json"
+      tag_keys = ["case_id", "activity", "station", "mode"]
+      json_string_fields = ["ts", "run_id"]
+{{- end }}
 {{- end }}
 
 {{- end }}
