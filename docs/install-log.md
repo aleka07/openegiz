@@ -955,3 +955,84 @@ Fallback verified for real, not just by reading the code: ran the script in busy
 
 ### Conclusion
 The stack is safe against sudden power-offs: everything auto-starts, storage layers are journaled, and the one runtime internet dependency now degrades gracefully. Remaining external factor: BIOS "restore on AC power" (machine did come back by itself this time) and the office LAN, neither controllable from the OS.
+
+---
+
+## 2026-08-07 — Hermes подключён к стеку: MCP-серверы Ditto/InfluxDB + скиллы JaamSim/pm4py
+
+Агент перестал быть просто чат-ботом на локальной модели: он теперь читает и пишет
+цифровой двойник, читает историю телеметрии, запускает симуляции и process mining.
+Подробности, архитектура и полные транскрипты тестов — в `docs/notes-hermes-integration.md`.
+Исходники — в `integrations/hermes/` (единственный источник правды, на хост едет
+через rsync + `install.sh`).
+
+### Что добавилось на хосте
+
+| Что | Куда | Как зарегистрировано |
+|---|---|---|
+| MCP-сервер `openegiz-ditto` (5 тулов) | `~/course/mcp/mcp_ditto.py` | `mcp_servers` в `~/.hermes/config.yaml` |
+| MCP-сервер `openegiz-influx` (3 тула) | `~/course/mcp/mcp_influx.py` | там же |
+| Скилл `jaamsim` + `run_jaamsim.sh` | `~/.hermes/skills/openegiz/jaamsim/` | автообнаружение по `SKILL.md` |
+| Скилл `pm4py-mining` + `influx_to_dataframe.py` | `~/.hermes/skills/openegiz/pm4py-mining/` | автообнаружение |
+| Креденшлы | `~/.config/openegiz-mcp.env`, chmod 600 | читается самими MCP-серверами |
+
+`~/course/venv` переиспользован (не заводили второй venv), добавился только
+`fastmcp` 3.4.6 — на aarch64 встал без бубна. Токен InfluxDB `install.sh` сам
+достаёт из секрета `opentwins-influxdb2-auth` **на хосте**; в репе и в
+`config.yaml` его нет, там только путь к env-файлу.
+
+### Правки конфига Hermes
+
+`~/.hermes/config.yaml` тронут ровно одной добавленной секцией `mcp_servers`
+(17 строк, `diff` чистый — `model`/`terminal`/`agent`/`platform_toolsets` не тронуты).
+Бэкапы снимаются автоматически перед каждой правкой:
+`~/.hermes/config.yaml.bak.20260807_163415`, `…_163443`.
+
+Регистрация — штатным `hermes mcp add`, не ручной правкой YAML.
+**Грабли:** без TTY `mcp add` после probe'а спрашивает «Enable all N tools?»,
+читает EOF и отменяет весь add, молча оставляя конфиг пустым. Лечится
+`printf 'y\n' |` перед командой — это уже зашито в `install.sh`.
+
+**Вторые грабли:** `hermes` живёт в `~/.local/bin/hermes`, а `~/.local/bin`
+попадает в PATH только из интерактивного `.bashrc`. В неинтерактивном ssh
+команды надо звать полным путём.
+
+### Проверено сквозь агента (не руками)
+
+Все 4 обязательных сценария прошли, плюс 3 бонусных. Модель —
+`morosystems/ThinkingCap-Qwen3.6-27B-NVFP4` на vLLM, 15–20 с на задачу целиком.
+
+| # | Промпт | Что вызвала | Результат |
+|---|---|---|---|
+| A | «current temperature of test:winterschool-1» | `ditto/get_feature` | 46.1 — сверено с curl |
+| B | «telemetry over the last 24 hours» | `influx/get_recent_telemetry(minutes=1440)` | 6 замеров, 0.0 → 50.5 |
+| C | «publish 50.5, then confirm the twin updated» | `ditto/publish_telemetry` → `ditto/get_thing` | двойник стал 50.5, сверено с curl |
+| D | «run CourseLine and report server utilization» | `skill_view(jaamsim)` → `terminal(run_jaamsim.sh)` | **0.8028** — настоящее число из `.dat` |
+| + | «which twins exist / which sent telemetry» | оба MCP-сервера в одном ходе | верно |
+| + | pm4py discovery | `skill_view` → `write_file` → `terminal` | 10 places / 13 transitions / fitness 1.0 |
+| + | `set_feature_property` со вложенным путём | REST-запись `status/mode` | HTTP 201, потом удалено |
+
+Тест B со второй попытки: первый прогон дал верные значения, но неверную подпись
+(«9 data points» при 5 замерах). Причина — **формат вывода моего тула**, а не
+галлюцинация: тул не различал записи `*_value` и `*_timestamp`. После правки
+заголовка вывода счёт стал верным. Практический вывод на будущее: тулы должны
+отдавать уже посчитанные агрегаты и не оставлять модели арифметику.
+
+Выбор тулов моделью — 6 из 6 верных, включая нетривиальные разграничения
+«текущее значение (Ditto) против истории (Influx)» и «опубликовать по MQTT
+против записать REST'ом». Скиллы подтягиваются сами по description, без
+`--skills`. JaamSim-обёртка отработала как задумано: exit code 0 помечен как
+недостоверный, свежесть `.dat`/`.rep` проверена по mtime.
+
+### Состояние стенда после прогонов
+
+`test:winterschool-1` теперь `temperature.value = 50.5` (было 46.1) — след теста C,
+оставлен намеренно. Временное свойство `status/mode` удалено.
+
+### Что осталось (не блокирует)
+
+Тулы не отфильтрованы — студентам сейчас доступны и запись в двойник, и
+произвольный Flux; для read-only профиля нужен `tools.include`.
+`terminal.backend` всё ещё `local` (шелл агента прямо на хосте k3s).
+Токен InfluxDB админский, стоит завести read-only на bucket `default`.
+Multi-user не решён.
