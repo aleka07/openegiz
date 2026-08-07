@@ -1,7 +1,7 @@
 ---
 name: pm4py-mining
-description: "Process mining on the OpenEgiz stack with pm4py: build an event log (from InfluxDB telemetry or a CSV/XES file) into pandas, discover a Petri net or DFG, check fitness, and render the process map. Use for any request to mine, discover or analyse a process, build an event log, compute fitness/conformance, or draw a process map."
-version: 1.0.0
+description: "Process mining on the OpenEgiz stack with pm4py: build an event log (from InfluxDB telemetry or a CSV/XES file) into pandas, discover a Petri net or DFG, check fitness, and render the process map. Includes the ready-made bakery production-line analysis (measurement batch_events -> bottleneck -> parameters for JaamSim). Use for any request to mine, discover or analyse a process, analyse a production line or bakery line, find a bottleneck, build an event log, compute fitness/conformance, or draw a process map."
+version: 1.1.0
 license: MIT
 platforms: [linux]
 metadata:
@@ -31,6 +31,73 @@ fitness, discovers a DFG and saves a PNG. Read it before writing anything new:
 ```bash
 cat ~/course/pm4py_check.py
 ```
+
+## The bakery production line — start here if the question is about it
+
+If the user asks about the **bakery**, the **production line**, **batches**, a
+**bottleneck** or a **process map of the line**, do not write a new script.
+A finished, tested pipeline already exists:
+
+```bash
+# compact text report: log shape, DFG, bottleneck, parameter table for JaamSim
+~/course/venv/bin/python ~/course/bakery/mining.py --summary
+
+# the same on the deliberately damaged dataset (15% of events dropped)
+~/course/venv/bin/python ~/course/bakery/mining.py --summary --mode dirty
+
+# full report incl. every DFG edge, and PNGs into /tmp/bakery-mining/
+~/course/venv/bin/python ~/course/bakery/mining.py
+```
+
+`--summary` runs in a few seconds and prints everything needed to answer:
+number of cases, the directly-follows graph, per-station service vs waiting
+time, the bottleneck, and the **PARAMETERS FOR JAAMSIM** table. That table is
+the hand-off to the `jaamsim` skill — copy its numbers into the
+`PARAMETERS — EDIT HERE` block of `~/course/bakery/jaamsim/BakeryLine.cfg`.
+
+`--range` takes a leading minus, which argparse reads as a flag. Always write
+`--range=-24h`, never `--range -24h`.
+
+The teaching notebook with the same analysis and the narrative is
+`~/course/bakery/mining.ipynb`; the runbook for the whole loop is
+`docs/runbook-bakery-scenario.md` in the repo.
+
+### Where the data is, and the three ways to get it wrong
+
+Measurement `batch_events` in bucket `default`. Tags: `case_id`, `activity`,
+`station`, `mode`. Fields: `ts`, `seq`, `queue_len`, `wip`.
+
+| Trap | Why it is fatal | What to do |
+|---|---|---|
+| `_time` vs `ts` | `_time` is *ingestion* time; the line was replayed at 200x speed, so every duration comes out 200x too short. `ts` is *process* time. | timestamp column = `ts` |
+| simultaneous events | `MixingDone` and `ProofingStarted` share a second by design, so the order inside a case is arbitrary | sort with a tie-break on field `seq` |
+| foreign cases | old smoke-test runs live in the same measurement | keep only `case_id` starting with `batch-` |
+
+One more Flux-level trap: `ts` is a **string** field and `seq`/`queue_len`/`wip`
+are floats, and Flux refuses to `pivot()` string and float into one `_value`
+column (`schema collision`). Pull them with two queries and join on `_time`.
+Both queries are already written in `~/course/bakery/mining.py`
+(`FLUX_LOG` / `FLUX_NUM`) — import that module rather than rewriting them:
+
+```python
+import sys; sys.path.insert(0, "/home/gx10-11/course/bakery")
+import mining
+df = mining.load_event_log(time_range="-24h", mode="normal", case_prefix="batch-")
+params, arrival = mining.jaamsim_parameters(df)
+print(mining.format_parameter_block(params, arrival))
+```
+
+Datasets currently in InfluxDB:
+
+| `--mode` | cases | events | what it is |
+|---|---|---|---|
+| `normal` | `batch-0001`..`batch-0020` | 160 | 20 complete batches, the reference log |
+| `dirty` | `batch-0101`..`batch-0110` | 68 | same line, 15% of events never recorded |
+
+The `dirty` run is not a broken copy — it is the point of an exercise. The
+same code on it reports the oven wait as 44 min instead of 106 min and the
+release interval as 16.4 min instead of 12.8, which flips the business
+decision. If asked to compare, run both and say so plainly.
 
 ## The event-log contract
 

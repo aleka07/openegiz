@@ -1,7 +1,7 @@
 ---
 name: jaamsim
-description: "Run discrete-event simulations of the OpenEgiz production line with JaamSim headless on this host, read the .dat/.rep results, and edit model parameters. Use for any request to simulate, run a what-if scenario, change arrival/service rates or replication counts, or report utilisation, queue length or throughput of a simulated line."
-version: 1.0.0
+description: "Run discrete-event simulations of the OpenEgiz production line with JaamSim headless on this host, read the .dat/.rep results, and edit model parameters. Includes the ready-made bakery line models (baseline, second oven, faster proofing) and a one-command comparison. Use for any request to simulate, run a what-if scenario, evaluate buying equipment or adding capacity, change arrival/service rates or replication counts, or report utilisation, queue length, lead time or throughput of a simulated line."
+version: 1.1.0
 license: MIT
 platforms: [linux]
 metadata:
@@ -39,6 +39,98 @@ Wrapper exit codes: `0` verified fresh output, `2` java failed, `3` java
 the `.cfg`.
 
 A 10000-minute / 3-replication run of `CourseLine.cfg` takes a few seconds.
+
+## The bakery line — start here if the question is about it
+
+If the user asks about the **bakery**, the **production line**, a **second
+oven**, **faster proofing**, or any what-if on throughput or lead time, the
+models already exist in `~/course/bakery/jaamsim/`. Do not build a new one.
+
+**First, though: if the request also mentions the event log, the process, the
+bottleneck, or "analyse", run the mining step before simulating.**
+
+```bash
+~/course/venv/bin/python ~/course/bakery/mining.py --summary
+```
+
+This is not optional politeness — the parameters in the `.cfg` files are a
+*snapshot* of an earlier mining run, quoted in the header comment. Simulating
+without re-mining answers "what would happen if the line still behaved the way
+it did last time", which is a different question and a weaker answer. The
+mining step also produces the one number the simulation cannot: the **measured**
+106.5-minute wait in front of the oven in the real log. Report the measurement
+and the simulation side by side; if they disagree, say so.
+
+The `pm4py-mining` skill documents that command in full.
+
+| File | What it is |
+|---|---|
+| `BakeryLine.cfg` | baseline, the line as it runs today |
+| `BakeryLine_TwoOvens.cfg` | what-if 1: `Oven Capacity` 1 → 2, one line changed |
+| `BakeryLine_FasterProofing.cfg` | what-if 2: `ProoferDist Scale` 38.99 → 29.24 min (−25%), one line changed |
+| `BakeryLine_Calibration.cfg` | not a scenario: baseline cut to the 250-min window the mined log covers, used to check the model against reality |
+
+**Run all three and get the comparison table in one command:**
+
+```bash
+python3 ~/course/bakery/jaamsim/compare_runs.py
+```
+
+It calls `run_jaamsim.sh` for each model (so a silent failure still fails
+loudly), parses the summary rows, and prints throughput per shift, lead time,
+oven queue, oven waiting time and oven utilisation side by side, plus the
+percentage change against the baseline. Prefer it over reading three `.dat`
+files by hand — the summary row interleaves mean and standard deviation, so
+"the fifth number" is not the fifth output.
+
+To run a single model:
+
+```bash
+bash ~/.hermes/skills/openegiz/jaamsim/scripts/run_jaamsim.sh \
+     ~/course/bakery/jaamsim/BakeryLine.cfg
+```
+
+### The model, in one paragraph
+
+`Launch` (EntityGenerator, lognormal interarrival) → `MixerQueue`/`Mixer` →
+`ProoferQueue`/`Proofer` → `OvenQueue`/`Oven` → `PackerQueue`/`Packer` →
+`LeadTime` (Statistics) → `Shipped` (EntitySink). Each station is an
+`EntityProcessor` — unlike `Server` it has a `Capacity` keyword, which is what
+lets the proofer hold 3 batches at once. Shift = 540 min, 3 replications.
+
+### Editing the parameter block
+
+Every model has one block marked `PARAMETERS — EDIT HERE (from mining)` near
+the top. Nothing outside it should ever be touched. Its numbers come from
+`~/course/bakery/mining.py --summary`, table "PARAMETERS FOR JAAMSIM".
+
+```
+ArrivalDist Scale                   { 12.53 min }   # median interarrival
+ArrivalDist NormalStandardDeviation { 0.133 }       # spread in log space
+Oven     Capacity                { 1 }              # batches at once
+OvenDist Scale                   { 24.93 min }      # median bake time
+OvenDist NormalStandardDeviation { 0.153 }
+Simulation RunDuration          { 540 min }         # one shift
+Simulation NumberOfReplications { 3 }
+```
+
+`NormalMean` is 0 in every distribution, so **`Scale` is the median** duration
+and the mean lands ~0.7% higher. Take `Scale` straight from the `median`
+column of the mining table; do not convert anything.
+
+To build a new what-if: copy `BakeryLine.cfg`, change **one** line in the
+parameter block, and keep the random seeds — then any difference in the result
+is caused by that one change and nothing else.
+
+### The expected answer
+
+The line launches a batch every ~12.5 min; the oven needs ~25 min and holds
+one. That is the whole story: the oven can pass at most half of what is
+launched, so the queue in front of it grows for as long as the shift runs.
+A second oven roughly doubles throughput; making proofing faster changes
+throughput by a few percent and makes the oven queue slightly *worse*, because
+batches reach the constraint sooner. If a run contradicts that, suspect the
+run, not the arithmetic.
 
 ## Reading the results
 
