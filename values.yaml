@@ -326,6 +326,16 @@ influxdb2:
 
 # OpenTwins recommended values for Grafana
 ##################################################################
+# The OpenEgiz Grafana app plugin is a FRONTEND plugin: it calls Ditto and the
+# extended API from the user's BROWSER, not from inside the cluster. Upstream
+# hardcoded cluster-internal service DNS names here, which a browser outside
+# the cluster cannot resolve — the Twins page then silently shows "No twins
+# found". These URLs must be reachable from wherever users open Grafana
+# (NodePorts on the host IP for this single-node LAN setup).
+grafanaPlugin:
+  dittoURL: http://192.168.0.135:30525
+  extendedURL: http://192.168.0.135:30528
+
 grafana:
   enabled: true # Value added by OpenTwins to indicate if this component should be installed or not
   persistence:

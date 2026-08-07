@@ -17,8 +17,8 @@ data:
       - type: ertis-opentwins-app
         org_id: 1
         jsonData:
-          dittoURL: http://{{ .Release.Name }}-ditto-nginx:{{ .Values.ditto.nginx.service.port }}
-          extendedURL: http://{{ .Release.Name }}-ditto-extended-api:{{ .Values.extendedAPI.service.port }}
+          dittoURL: {{ (.Values.grafanaPlugin).dittoURL | default (printf "http://%s-ditto-nginx:%v" .Release.Name .Values.ditto.nginx.service.port) }}
+          extendedURL: {{ (.Values.grafanaPlugin).extendedURL | default (printf "http://%s-ditto-extended-api:%v" .Release.Name .Values.extendedAPI.service.port) }}
           dittoUsername: {{ .Values.ditto.global.basicAuthUsers.ditto.user }}
           dittoDevopsUsername: {{ .Values.ditto.global.basicAuthUsers.devops.user }}
         secureJsonData:
