@@ -1,10 +1,7 @@
 # OpenEgiz
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="openegiz_logo_dark.svg">
-    <img src="openegiz_logo_centered.svg" alt="OpenEgiz logo" width="360">
-  </picture>
+  <img src="docs/img/logo-readme.svg" alt="OpenEgiz logo" width="420">
 </p>
 
 An open-source digital twin platform for industry: live twin state (Eclipse Ditto), telemetry (MQTT → Telegraf → InfluxDB), dashboards and twin management UI (Grafana), 3D visualization (Unity WebGL) — deployed as a single Helm chart.
