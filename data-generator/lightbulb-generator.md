@@ -76,8 +76,11 @@ curl -X POST -d '{"state":"on"}' http://localhost:8090/state
 
 ## Проверка данных в Ditto
 
+> `$DITTO_PW` — пароль пользователя `ditto`, ротирован 2026-08-07. Взять с хоста:
+> `~/course/CREDENTIALS.md`, либо экспортировать из helm-оверрайда (см. гайд 03).
+
 ```bash
-curl -s -u ditto:ditto http://localhost:30525/api/2/things/summerschool:lightbulb-01/features | python3 -m json.tool
+curl -s -u ditto:$DITTO_PW http://localhost:30525/api/2/things/summerschool:lightbulb-01/features | python3 -m json.tool
 ```
 
 ## Аргументы

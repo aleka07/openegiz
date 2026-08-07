@@ -11,12 +11,15 @@
 #   1. installs the MCP server dependencies into ~/course/venv
 #   2. copies the MCP servers to ~/course/mcp/
 #   3. copies the skills to ~/.hermes/skills/openegiz/
-#   4. writes ~/.config/openegiz-mcp.env (chmod 600) with the InfluxDB admin
-#      token read from the k8s secret — the token never leaves the host
-#   5. backs up ~/.hermes/config.yaml (timestamped) and registers the two MCP
-#      servers, touching nothing else in the config
+#   4. writes ~/.config/openegiz-mcp.env (chmod 600) with the Ditto password
+#      taken from the helm secrets override and a READ-ONLY InfluxDB token
+#      minted inside the influxdb pod — no secret ever leaves the host
+#   5. backs up ~/.hermes/config.yaml (timestamped), registers the two MCP
+#      servers and re-applies the openegiz-ditto tool filter, touching
+#      nothing else in the config
 #
-# Env overrides: VENV, MCP_DIR, SKILLS_DIR, ENV_FILE, HERMES_BIN.
+# Env overrides: VENV, MCP_DIR, SKILLS_DIR, ENV_FILE, HERMES_BIN,
+#                SECRETS_FILE, DITTO_PASSWORD.
 
 set -euo pipefail
 
@@ -28,9 +31,48 @@ ENV_FILE="${ENV_FILE:-$HOME/.config/openegiz-mcp.env}"
 HERMES_BIN="${HERMES_BIN:-$HOME/.local/bin/hermes}"
 HERMES_CONFIG="$HOME/.hermes/config.yaml"
 KUBECONFIG_PATH="${KUBECONFIG_PATH:-/etc/rancher/k3s/k3s.yaml}"
+# Credentials were rotated 2026-08-07 and deliberately live outside the repo.
+SECRETS_FILE="${SECRETS_FILE:-$HOME/openegiz-deploy/secrets.values.yaml}"
+INFLUX_RO_DESC="hermes MCP read-only (created 2026-08-07)"
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 die() { printf '\033[31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
+
+# Print a read-only InfluxDB token for the `default` bucket, creating it on
+# first run. Everything happens inside the influxdb pod; only the token value
+# crosses back, and it is never echoed to the terminal by the caller.
+#
+# NOTE: `kubectl exec` without -i on purpose. With -i it forwards this
+# script's stdin, which silently swallows the rest of the script when the
+# installer is piped in (`ssh host 'bash -s' < install.sh`).
+get_or_create_readonly_influx_token() {
+  local k="sudo KUBECONFIG=$KUBECONFIG_PATH kubectl -n opentwins"
+  local pod=opentwins-influxdb2-0
+  local op tok
+  op="$($k get secret opentwins-influxdb2-auth -o jsonpath='{.data.admin-token}' | base64 -d)"
+  [ -n "$op" ] || die "could not read admin-token from secret/opentwins-influxdb2-auth"
+
+  _lookup() {
+    $k exec "$pod" -- influx auth list -t "$op" --json \
+      | DESC="$INFLUX_RO_DESC" "$VENV/bin/python" -c '
+import json, os, sys
+print(next((a["token"] for a in json.load(sys.stdin)
+            if a["description"] == os.environ["DESC"]), ""))'
+  }
+
+  tok="$(_lookup)"
+  if [ -z "$tok" ]; then
+    local bucket_id
+    bucket_id="$($k exec "$pod" -- influx bucket list -t "$op" --org opentwins --json \
+      | "$VENV/bin/python" -c '
+import json, sys
+print(next(b["id"] for b in json.load(sys.stdin) if b["name"] == "default"))')"
+    $k exec "$pod" -- influx auth create --read-bucket "$bucket_id" --org opentwins \
+      -t "$op" -d "$INFLUX_RO_DESC" >/dev/null
+    tok="$(_lookup)"
+  fi
+  printf '%s' "$tok"
+}
 
 # ---------------------------------------------------------------- preflight
 say "preflight"
@@ -72,9 +114,24 @@ find "$SKILLS_DIR" -name 'SKILL.md' -printf '  %p\n'
 
 # --------------------------------------------------------------- env file
 say "credentials -> $ENV_FILE"
-INFLUX_TOKEN="$(sudo KUBECONFIG="$KUBECONFIG_PATH" kubectl -n opentwins get secret \
-    opentwins-influxdb2-auth -o jsonpath='{.data.admin-token}' | base64 -d)"
-[ -n "$INFLUX_TOKEN" ] || die "could not read admin-token from secret/opentwins-influxdb2-auth"
+
+# Ditto password: taken from the helm secrets override, which is the single
+# source of truth for what is actually deployed. It is NOT in the repo.
+if [ -z "${DITTO_PASSWORD:-}" ]; then
+  [ -f "$SECRETS_FILE" ] || die "secrets override not found: $SECRETS_FILE (or pass DITTO_PASSWORD=...)"
+  DITTO_PASSWORD="$("$VENV/bin/python" - "$SECRETS_FILE" <<'PY'
+import sys, yaml
+print(yaml.safe_load(open(sys.argv[1]))["ditto"]["global"]["basicAuthUsers"]["ditto"]["password"])
+PY
+)"
+fi
+[ -n "$DITTO_PASSWORD" ] || die "could not determine the Ditto password"
+
+# InfluxDB token: a READ-ONLY token scoped to the `default` bucket, minted
+# inside the influxdb pod. Hermes must never hold the operator token — the
+# agent is allowed to query history, not to rewrite it. Reused if it exists.
+INFLUX_TOKEN="$(get_or_create_readonly_influx_token)"
+[ -n "$INFLUX_TOKEN" ] || die "could not obtain a read-only InfluxDB token"
 
 mkdir -p "$(dirname "$ENV_FILE")"
 umask 077
@@ -83,7 +140,7 @@ cat > "$ENV_FILE" <<EOF
 # SECRET FILE. Never copy this into the repo or paste its contents anywhere.
 DITTO_URL=http://localhost:30525/api/2
 DITTO_USER=ditto
-DITTO_PASSWORD=ditto
+DITTO_PASSWORD=$DITTO_PASSWORD
 MQTT_HOST=localhost
 MQTT_PORT=30511
 INFLUX_URL=http://localhost:30716
@@ -92,7 +149,7 @@ INFLUX_BUCKET=default
 INFLUX_TOKEN=$INFLUX_TOKEN
 EOF
 chmod 600 "$ENV_FILE"
-unset INFLUX_TOKEN
+unset INFLUX_TOKEN DITTO_PASSWORD
 ls -l "$ENV_FILE"
 echo "(token length: $(grep -c . "$ENV_FILE") lines written, value not printed)"
 
@@ -117,6 +174,39 @@ register() {
 }
 register openegiz-ditto  mcp_ditto.py
 register openegiz-influx mcp_influx.py
+
+# `mcp add` writes a fresh server block, so the tool filter has to be put back
+# every time. Schema (hermes-agent tools/mcp_tool.py, _register_server_tools):
+#   mcp_servers.<name>.tools.include -> whitelist, takes precedence
+#   mcp_servers.<name>.tools.exclude -> blacklist; exact names or fnmatch globs
+# set_feature_property writes straight into the twin and bypasses the
+# MQTT -> Ditto -> Telegraf -> InfluxDB path the course is built around.
+# publish_telemetry deliberately stays: it uses the real pipeline.
+say "restricting openegiz-ditto tools"
+"$VENV/bin/python" - "$HERMES_CONFIG" <<'PY'
+import sys
+p = sys.argv[1]
+lines = open(p).read().splitlines()
+anchor = "  openegiz-ditto:"
+if anchor not in lines:
+    sys.exit("ERROR: %r not found in %s" % (anchor, p))
+i = lines.index(anchor)
+j = i + 1
+while j < len(lines) and (lines[j].startswith("    ") or not lines[j].strip()):
+    j += 1
+if "set_feature_property" in "\n".join(lines[i:j]):
+    print("  already excluded")
+else:
+    lines[i+1:i+1] = [
+        "    tools:",
+        "      # direct twin writes bypass the MQTT -> Ditto -> Telegraf -> InfluxDB",
+        "      # path; publish_telemetry stays because it uses the real pipeline.",
+        "      exclude:",
+        "        - set_feature_property",
+    ]
+    open(p, "w").write("\n".join(lines) + "\n")
+    print("  set_feature_property excluded")
+PY
 
 say "result"
 "$HERMES_BIN" mcp list || true

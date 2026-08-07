@@ -1,4 +1,4 @@
-.PHONY: install uninstall status endpoints upgrade upload-build generate-data copy-build
+.PHONY: install uninstall status endpoints upgrade upload-build generate-data copy-build check-secrets
 
 # Several values reference names derived from the release name (e.g. the
 # telegraf configmap), so the release MUST be called "opentwins" until those
@@ -7,13 +7,27 @@ RELEASE_NAME := opentwins
 NAMESPACE    := opentwins
 CHART_PATH   := .
 
+# Credentials live OUTSIDE this repo (rotated 2026-08-07). values.yaml carries
+# only invalid placeholders, so install/upgrade must always be given this
+# override file. Deliberately a hard failure rather than a silent fallback:
+# deploying the placeholders would break Ditto auth and telemetry ingest.
+SECRETS_FILE ?= $(HOME)/openegiz-deploy/secrets.values.yaml
+
+check-secrets:
+	@test -f "$(SECRETS_FILE)" || { \
+	  echo "ERROR: secrets override not found: $(SECRETS_FILE)"; \
+	  echo "       It holds the Ditto/Grafana/InfluxDB credentials that are"; \
+	  echo "       intentionally absent from values.yaml. See ~/course/CREDENTIALS.md"; \
+	  echo "       on the host, or override with: make upgrade SECRETS_FILE=/path/to/file"; \
+	  exit 1; }
+
 ## Install the OpenEgiz Helm chart
-install:
-	helm install $(RELEASE_NAME) $(CHART_PATH) -n $(NAMESPACE) --create-namespace --wait --timeout=15m --debug
+install: check-secrets
+	helm install $(RELEASE_NAME) $(CHART_PATH) -n $(NAMESPACE) --create-namespace -f "$(SECRETS_FILE)" --wait --timeout=15m --debug
 
 ## Upgrade the OpenEgiz Helm chart
-upgrade:
-	helm upgrade $(RELEASE_NAME) $(CHART_PATH) -n $(NAMESPACE) --wait --timeout=15m --debug
+upgrade: check-secrets
+	helm upgrade $(RELEASE_NAME) $(CHART_PATH) -n $(NAMESPACE) -f "$(SECRETS_FILE)" --wait --timeout=15m --debug
 
 ## Uninstall the OpenEgiz Helm chart
 uninstall:

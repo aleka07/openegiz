@@ -36,6 +36,9 @@ python3 data_generator.py --mqtt-host 192.168.1.100 --mqtt-port 1883
 
 ## Проверка данных
 
+> `$DITTO_PW` — пароль пользователя `ditto`, ротирован 2026-08-07. Взять с хоста:
+> `~/course/CREDENTIALS.md`, либо экспортировать из helm-оверрайда (см. гайд 03).
+
 ```bash
-curl -s -u ditto:ditto http://localhost:30525/api/2/things/org.digitalegiz:oven-01/features | python3 -m json.tool
+curl -s -u ditto:$DITTO_PW http://localhost:30525/api/2/things/org.digitalegiz:oven-01/features | python3 -m json.tool
 ```

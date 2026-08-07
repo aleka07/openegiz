@@ -42,7 +42,7 @@ Delegated to executor agent → report: [arm64-audit.md](arm64-audit.md).
 - [x] Rebrand-lite part 1: Grafana plugins vendored + rebranded — see "Rebrand-lite: Grafana plugins" below
 - [ ] Rebrand-lite part 2: Grafana login/nav logo + app title, config renames (topics/org/tenant opentwins→openegiz)
 - [ ] Logo: mark-only (square) variant for the 24px nav slot — current wordmark is unreadable that small
-- [ ] Close security hole before school: unauthenticated MongoDB on NodePort 30717 → switch `plainMongodb.service.type` to ClusterIP
+- [x] Close security hole before school: unauthenticated MongoDB on NodePort 30717 → switch `plainMongodb.service.type` to ClusterIP — done 2026-08-07, see "Security pass" below (плюс ротация всех дефолтных учёток)
 - [ ] pm4py venv, JaamSim (Java 8 present; decide X11 vs headless)
 - [ ] Hermes agent layer — last, after the stack is stable
 
@@ -1036,3 +1036,128 @@ The stack is safe against sudden power-offs: everything auto-starts, storage lay
 `terminal.backend` всё ещё `local` (шелл агента прямо на хосте k3s).
 Токен InfluxDB админский, стоит завести read-only на bucket `default`.
 Multi-user не решён.
+
+---
+
+## 2026-08-07 — Security pass перед школой: закрыт MongoDB, ротация всех дефолтных учёток
+
+Ревизия 6 чарта. Задача: убрать из стенда всё, что опубликовано в открытом репозитории
+или известно наизусть любому, кто читал апстрим OpenTwins.
+
+### 1. MongoDB убрана из сети ✅
+
+`plainMongodb.service.type: NodePort → ClusterIP` (заодно то же самое для отключённого
+bitnami-сабчарта, чтобы дыра не вернулась, если его когда-нибудь включат).
+Порт 30717 больше не слушается: `nc -z 127.0.0.1 30717` — отказ, `curl` — таймаут.
+Сервис `opentwins-mongodb` теперь `ClusterIP 10.43.49.185:27017`.
+
+Ditto это не задело: и Ditto, и extended API, и hono-реестр ходят в Mongo по
+внутрикластерному DNS-имени, а имя сервиса не менялось (оно собирается хелпером
+`opentwins.mongodb.fullname`). Все 8 подов Ditto живы, коннекторы `open`.
+Для разовой инспекции с хоста:
+`kubectl port-forward -n opentwins svc/opentwins-mongodb 27017:27017`.
+
+### 2. Ротация учётных данных ✅
+
+Заменены (значения — только на хосте, см. ниже):
+
+| Система | Что было | Что сделано |
+|---|---|---|
+| Grafana | `admin:admin` | новый пароль в `values` + `grafana cli admin reset-admin-password` в поде (пароль лежит в собственной БД Grafana на PVC, одного секрета мало) |
+| Ditto `ditto` | `ditto:ditto` | новый пароль, htpasswd пересобран чартом, nginx перезапущен по checksum-аннотации |
+| Ditto `devops` | `devops:foobar` | новый пароль в `basicAuthUsers` **и** в `gateway.config.authentication.devops.*` (devops + status) |
+| InfluxDB admin | `password` | смена живого пароля через `POST /api/v2/users/<id>/password` (сабчарт применяет `adminUser` только при первом bootstrap — правка values на живой инстанс не влияет) |
+| InfluxDB operator token | токен из `values.yaml`, опубликованный в открытом репозитории | создан новый operator-токен, старый **удалён** из InfluxDB (проверено: 401) |
+
+Проверено: `ditto:ditto` → 401, `devops:foobar` → 401, `admin:admin` в Grafana → 401;
+новые учётки → 200. Datasource Grafana: `datasource is working. 3 buckets found`.
+
+**Побочные эффекты, обработанные в том же проходе:**
+- Grafana-плагин берёт креды из тех же values через `templates/config-maps/cm-enable-grafana-plugin.yaml` — обновился сам; проверено сквозняком: `GET :30528/api/twins/` → 200 и отдаёт `test:winterschool-1`.
+- extended API получает креды из values через `templates/extended-api/deploy.yaml` — под пересоздан, отвечает на 30528.
+- `ditto-fixer` держит `devops:пароль` прямо в args деплоймента — шаблон перерисовался, под пересоздан.
+- post-install-джобы — это `helm.sh/hook: post-install`, на upgrade не запускаются; существующие коннекторы Ditto→Mosquitto кредов не содержат (Mosquitto без аутентификации, `authorizationContext: nginx:ditto` — это subject, а не пароль). Трогать не потребовалось.
+- Telegraf читает токен из configmap, но у деплоймента нет checksum-аннотации → рестарт вручную (`kubectl rollout restart deploy/opentwins-telegraf`), иначе он продолжал бы ходить со старым токеном.
+- `~/.config/openegiz-mcp.env` (Hermes) — обновлены `DITTO_PASSWORD` и `INFLUX_TOKEN`.
+- `integrations/hermes/install.sh` переписан: пароль Ditto берётся из secrets-оверрайда, токен InfluxDB — read-only (создаётся в поде, если его нет), а после `mcp add` заново накладывается фильтр тулов (иначе повторный запуск установщика молча снимал бы его).
+
+**Mosquitto оставлен без аутентификации намеренно** — курс строится на том, что студент
+публикует MQTT с ноутбука в LAN одной командой, без раздачи паролей.
+
+### Где теперь лежат секреты
+
+В git-репозитории паролей нет. `values.yaml` содержит только заведомо невалидные
+плейсхолдеры `REPLACE_ME_SEE_SECRETS_VALUES_FILE`, чтобы `helm upgrade` без оверрайда
+падал громко, а не восстанавливал апстримные дефолты по-тихому.
+
+| Файл (только на хосте) | Что внутри | Права |
+|---|---|---|
+| `~/openegiz-deploy/secrets.values.yaml` | helm-оверрайд: пароли Ditto/Grafana/InfluxDB + operator-токен | 600 |
+| `~/course/CREDENTIALS.md` | человекочитаемая таблица «система / логин / пароль / где используется» | 600 |
+| `~/.config/openegiz-mcp.env` | рантайм Hermes: пароль Ditto + read-only токен | 600 |
+
+Деплой теперь всегда с оверрайдом:
+```
+helm upgrade opentwins ~/openegiz-deploy/chart -n opentwins \
+  -f ~/openegiz-deploy/secrets.values.yaml
+```
+`make upgrade` подставляет его сам и отказывается работать, если файла нет
+(цель `check-secrets`). Скрипты ротации сложены в `~/openegiz-deploy/scripts/`.
+
+### 3. Read-only токен InfluxDB для Hermes ✅
+
+`influx auth create --read-bucket <default>` → токен с правом чтения одного бакета,
+прописан в `~/.config/openegiz-mcp.env` вместо админского.
+Проверено: `POST /api/v2/query` → 200 с данными, `POST /api/v2/write` → **403**.
+`flux_query` с `to()` тоже не проходит (падает на поиске организации — read-only токен
+её не видит). Админский токен у агента больше не лежит нигде.
+
+### 4. Фильтр тулов Hermes ✅
+
+В `~/.hermes/config.yaml` (бэкап `config.yaml.bak.20260807_171100`):
+
+```yaml
+mcp_servers:
+  openegiz-ditto:
+    tools:
+      exclude:
+        - set_feature_property
+```
+
+Схема подтверждена по исходникам (`~/.hermes/hermes-agent/tools/mcp_tool.py`,
+`_register_server_tools`): `tools.include` — белый список, имеет приоритет;
+`tools.exclude` — чёрный; элементы — точные имена тулов или fnmatch-глобы.
+
+`hermes mcp list` показывает `-1 excluded` у `openegiz-ditto`.
+Живой прогон `hermes -z "Set the temperature property ... directly ... Do not use telemetry"`:
+агент перечислил доступные тулы, не нашёл записи в двойник, отказался и предложил
+`publish_telemetry`. Значение двойника не изменилось.
+`publish_telemetry` оставлен: он идёт по настоящему пути MQTT → Ditto → Telegraf → InfluxDB
+и это демонстрация курса. `flux_query` оставлен — он теперь read-only по токену.
+
+Оговорка: `hermes mcp test openegiz-ditto` по-прежнему показывает 5 тулов — это список,
+который отдаёт сам MCP-сервер. Фильтр применяется при регистрации тулов в агенте, а не
+на сервере, поэтому смотреть надо на `hermes mcp list` и на поведение агента.
+
+### Сквозная проверка после всех изменений
+
+- 14/14 подов Running.
+- Grafana: вход по новому паролю (401 на старом), datasource жив.
+- Twins-страница: extended API `GET :30528/api/twins/` → 200, отдаёт `test:winterschool-1`.
+- Полный путь записи: `publish_telemetry(63.25)` → MQTT → Ditto (`get_feature` = 63.25)
+  → Telegraf (новый токен) → InfluxDB (`get_recent_telemetry` показывает запись 12:14:07).
+- Hermes: `hermes -z "What is the current temperature of thing test:winterschool-1?"` →
+  корректный ответ через всю цепочку с новыми кредами.
+
+### Остаточные риски (осознанно оставлены)
+
+1. **Mosquitto без аутентификации** на 30511/31039 — требование курса, LAN-стенд.
+2. **extended API без аутентификации** на NodePort 30528 — плагин Grafana дёргает его
+   из браузера студента, а в самом сервисе аутентификации нет вообще. Кто угодно в LAN
+   может читать и писать двойники через этот порт, минуя пароли Ditto. Не чинилось:
+   любое решение (ingress с auth, сеть-политика, убрать NodePort) ломает Twins-страницу.
+3. **Терминал Hermes — `backend: local`**, то есть шелл агента исполняется прямо на хосте
+   k3s. Фильтр тулов закрывает запись в двойник через MCP, но не терминал как таковой.
+4. Пароли одинаковые для всех — один общий стенд, персональных учёток нет.
+5. `connections.ditto.source.hono.password` в `values.yaml` остался дефолтным — hono
+   отключён (`hono.enabled: false`), в кластере этих кредов нет.

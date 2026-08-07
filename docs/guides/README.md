@@ -48,7 +48,7 @@ Grafana (она же UI OpenEgiz) — порт **30718**, логин `admin` / `
 
 ## Дефолтные пароли
 
-Grafana `admin:admin` · Ditto `ditto:ditto` (devops `devops:foobar`) · InfluxDB `admin:password` · MongoDB и Mosquitto — без аутентификации вообще.
+Учётные данные ротированы 2026-08-07 — актуальные значения только на хосте, в `~/course/CREDENTIALS.md`. MongoDB снаружи недоступна (ClusterIP); Mosquitto и Ditto Extended API остаются без аутентификации намеренно.
 
 Это дефолты чарта. Для учебного стенда **в LAN** приемлемо, наружу выставлять нельзя. Полный список эндпоинтов и оговорки — в гайде [03](03%20–%20Проверка%20и%20сквозной%20тест.md).
 

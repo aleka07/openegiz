@@ -26,7 +26,8 @@ already has (JaamSim, pm4py).
 ## Tool → stack map
 
 `mcp_ditto.py` → **Eclipse Ditto** on `http://localhost:30525/api/2`
-(basic auth `ditto:ditto`) and **MQTT** on `localhost:30511`.
+(basic auth as user `ditto`; the password was rotated 2026-08-07 and lives only on
+the host, see `~/course/CREDENTIALS.md`) and **MQTT** on `localhost:30511`.
 
 | Tool | Does | Path through the stack |
 |---|---|---|
@@ -74,12 +75,40 @@ drift apart.
 
 ## Secrets
 
-The InfluxDB admin token is read from the k8s secret
-`opentwins-influxdb2-auth` **by `install.sh`, on the host**, and written to
-`~/.config/openegiz-mcp.env` with mode 600. It is never in this repo and never
-in `config.yaml`: each MCP server loads that env file itself at startup
-(`_env.py`), and `config.yaml` only carries the path to it. Real environment
-variables win over the file, so anything can still be overridden per-server.
+`install.sh` assembles `~/.config/openegiz-mcp.env` (mode 600) **on the host**
+and nothing lands in this repo:
+
+- the Ditto password comes from the helm secrets override
+  `~/openegiz-deploy/secrets.values.yaml`, which is the source of truth for
+  what is actually deployed;
+- the InfluxDB token is a **read-only** token scoped to the `default` bucket,
+  minted inside the influxdb pod on first run and reused afterwards. Hermes
+  never holds the operator token — the agent may query history, not rewrite it.
+
+Neither value is in `config.yaml`: each MCP server loads the env file itself at
+startup (`_env.py`), and `config.yaml` only carries the path to it. Real
+environment variables win over the file, so anything can still be overridden
+per-server.
+
+## Tool filter
+
+`set_feature_property` is excluded from the `openegiz-ditto` server in
+`~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  openegiz-ditto:
+    tools:
+      exclude:
+        - set_feature_property
+```
+
+A direct twin write bypasses the MQTT → Ditto → Telegraf → InfluxDB path the
+course is built around, so students get `publish_telemetry` instead. `mcp add`
+rewrites the server block, so `install.sh` re-applies the filter after
+registering. Note `hermes mcp test` still lists all five tools — that is what
+the server advertises; the filter applies when tools are registered with the
+agent, so check `hermes mcp list` (`-1 excluded`) instead.
 
 ## Deploy / re-deploy
 

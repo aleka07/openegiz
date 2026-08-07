@@ -94,13 +94,25 @@ ditto:
   nameOverride: ditto
   global:
     hashedBasicAuthUsers: false
+    # ----------------------------------------------
+    # SECRETS ARE NOT STORED IN THIS FILE (rotated 2026-08-07).
+    # The placeholders below are deliberately invalid so that a `helm upgrade`
+    # without the secrets override fails loudly instead of silently restoring
+    # the published upstream defaults (ditto/ditto, devops/foobar).
+    # Real values live ONLY on the host:
+    #   override file : ~/openegiz-deploy/secrets.values.yaml  (chmod 600)
+    #   human copy    : ~/course/CREDENTIALS.md                (chmod 600)
+    # Deploy with:  helm upgrade opentwins <chart> -n opentwins \
+    #                 -f ~/openegiz-deploy/secrets.values.yaml
+    # (`make upgrade` does this for you and refuses to run without the file.)
+    # ----------------------------------------------
     basicAuthUsers:
       ditto:
         user: ditto
-        password: ditto
+        password: REPLACE_ME_SEE_SECRETS_VALUES_FILE
       devops:
         user: devops
-        password: foobar
+        password: REPLACE_ME_SEE_SECRETS_VALUES_FILE
     # ----------------------------------------------
     # Upstream default PLUS `-XX:MaxRAM=2147483648`. Everything else here is
     # verbatim from charts/ditto/values.yaml `global.jvmOptions`; this is a
@@ -159,8 +171,9 @@ ditto:
       authentication:
         enablePreAuthentication: true
         devops:
-          devopsPassword: foobar
-          statusPassword: foobar
+          # Placeholders — real values in ~/openegiz-deploy/secrets.values.yaml
+          devopsPassword: REPLACE_ME_SEE_SECRETS_VALUES_FILE
+          statusPassword: REPLACE_ME_SEE_SECRETS_VALUES_FILE
     # See the memory note below.
     resources:
       memoryMi: 2048
@@ -315,11 +328,24 @@ influxdb2:
   adminUser:
     organization: "opentwins"
     bucket: "default"
-    password: "password"
   # ----------------------------------------------
-  # We have generated this token randomly in this page: https://generate-random.org/api-token-generator
-  # We recommend to generate one of your own and assign it to this value in your values file.
-    token: "Hjh3ysMQ6evK=qqpFSYqn-s3JGovJLfHxyCDM=eNNZkdM-uuro93dNtJcodejLYYob2geKQ/29z3Kxui=y6FlL?dZeU9EFRxrYn284V/kZG5==jxLVAMJrYOv?LF79ahwIbhvstMN6gmfQ3DH7/IzUB7VlBZK-cd8aN7YqiFrYRLkBUv7H0QkbqPxgf2dMgCMCwZaLMk9RUeMaBfx2lQ=Mq1EEJJw-Jp!BmpCDnhlc!6D22PaE=Y3sgWWNhRv8oP"
+  # SECRETS ARE NOT STORED IN THIS FILE (rotated 2026-08-07).
+  # Upstream shipped a fixed admin password and a fixed admin token here; both
+  # were published verbatim in this public repo, so both were rotated. The
+  # placeholders below are deliberately invalid — see the note under
+  # `ditto.global.basicAuthUsers` for where the real values live.
+  #
+  # `token` is consumed by templates/config-maps/cm-telegraf.yaml and
+  # templates/config-maps/cm-influxdb-grafana-datasource.yaml, so an upgrade
+  # without the override file breaks telemetry ingest and the Grafana
+  # datasource (loudly — that is the point).
+  #
+  # NOTE: the influxdb2 subchart applies `adminUser` only at FIRST bootstrap.
+  # Changing these values does nothing to a running instance; the live
+  # password/token must be changed through the influx API/CLI as well.
+  # ----------------------------------------------
+    password: REPLACE_ME_SEE_SECRETS_VALUES_FILE
+    token: REPLACE_ME_SEE_SECRETS_VALUES_FILE
   # ----------------------------------------------
 
 
@@ -352,7 +378,11 @@ grafana:
     type: NodePort
     nodePort: 30718
   adminUser: admin
-  adminPassword: admin
+  # Placeholder — real value in ~/openegiz-deploy/secrets.values.yaml.
+  # Note Grafana stores the admin password in its own DB on the PVC after
+  # first start, so changing this value alone does not change the live
+  # password (`grafana cli admin reset-admin-password` does).
+  adminPassword: REPLACE_ME_SEE_SECRETS_VALUES_FILE
   grafana.ini:
     plugins:
       plugin_admin_enabled: true
@@ -480,10 +510,9 @@ hono:
 mongodb:
   enabled: false
   nameOverride: mongodb
+  # ClusterIP, same reasoning as plainMongodb below (no auth -> no NodePort).
   service:
-    type: NodePort
-    nodePorts:
-      mongodb: 30717
+    type: ClusterIP
   persistence:
     enabled: true
   auth:
@@ -510,10 +539,15 @@ plainMongodb:
   enabled: true
   image: mongo:6.0
   imagePullPolicy: IfNotPresent
+  # ClusterIP since 2026-08-07: MongoDB runs without authentication, so it must
+  # not be reachable from outside the cluster. Every real consumer (Ditto via
+  # ditto-mongodb-connection-secret, the extended API, the Hono device
+  # registry) talks to it in-cluster over the service DNS name, so dropping the
+  # NodePort (was 30717) costs nothing. For ad-hoc inspection from the host use
+  # `kubectl port-forward -n opentwins svc/opentwins-mongodb 27017:27017`.
   service:
-    type: NodePort
+    type: ClusterIP
     port: 27017
-    nodePort: 30717
   persistence:
     storageClass: local-path
     size: 8Gi
