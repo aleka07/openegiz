@@ -101,6 +101,39 @@ ditto:
       devops:
         user: devops
         password: foobar
+    # ----------------------------------------------
+    # Upstream default PLUS `-XX:MaxRAM=2147483648`. Everything else here is
+    # verbatim from charts/ditto/values.yaml `global.jvmOptions`; this is a
+    # scalar, so overriding it means restating the whole string.
+    #
+    # Why: on this host the JVM does not honour the cgroup v2 memory limit.
+    # Inside a Ditto container `/sys/fs/cgroup/memory.max` correctly reads
+    # 2147483648 and `/proc/self/cgroup` is `0::/`, but JDK 17.0.8.1 (Temurin,
+    # aarch64 — the JDK baked into eclipse/ditto:3.3.7) still reports
+    # `MaxRAM = 130596184064`, i.e. the full 121 GiB of host RAM. The chart then
+    # applies `-XX:MaxRAMPercentage=60 -XX:InitialRAMPercentage=60`, so the JVM
+    # tries to COMMIT a ~73 GiB heap at startup and the kernel OOM-kills the
+    # container about a second in (exit code 137). All five Ditto JVM services
+    # died this way, and raising the k8s limit does nothing because the JVM
+    # never looks at it.
+    #
+    # `-XX:MaxRAM` gives the ergonomics an explicit base to compute from, so
+    # the percentages behave as the chart intends: 60 % of 2 GiB ≈ 1229 MiB heap.
+    # Verified in-cluster: MaxHeapSize goes from 78383153152 to 1289748480.
+    #
+    # !! This value is coupled to `resources.memoryMi: 2048` on the five JVM
+    # services below. Change both together, or the JVM will size its heap
+    # against a limit the container does not actually have.
+    # ----------------------------------------------
+    jvmOptions: >
+      -XX:+ExitOnOutOfMemoryError
+      -XX:+UseContainerSupport
+      -XX:MaxRAM=2147483648
+      -XX:+UseStringDeduplication
+      -Xss512k
+      -XX:MaxMetaspaceSize=256m
+      -XX:+UseG1GC
+      -Djava.net.preferIPv4Stack=true
   nginx:
     service:
       type: NodePort
@@ -128,6 +161,34 @@ ditto:
         devops:
           devopsPassword: foobar
           statusPassword: foobar
+    # See the memory note below.
+    resources:
+      memoryMi: 2048
+
+  # ----------------------------------------------
+  # Memory for the five Ditto JVM services. Upstream ships `memoryMi: 1024`,
+  # used as BOTH the k8s request and the limit. 2048 pairs with the
+  # `-XX:MaxRAM=2147483648` set in `global.jvmOptions` above: ~1229 MiB heap
+  # + 256 MiB metaspace leaves ~560 MiB for code cache, thread stacks, GC
+  # structures and Netty direct buffers. Cost is 10 GiB across the five pods,
+  # which is nothing on a 121 GiB node.
+  #
+  # NOTE the upstream key is camelCase `thingsSearch` while the others are
+  # lowercase. A `thingssearch:` block here would be silently ignored — Helm
+  # does not warn about values that match no key in the subchart.
+  # ----------------------------------------------
+  things:
+    resources:
+      memoryMi: 2048
+  thingsSearch:
+    resources:
+      memoryMi: 2048
+  policies:
+    resources:
+      memoryMi: 2048
+  connectivity:
+    resources:
+      memoryMi: 2048
   #connectivity:
   #  readinessProbe:
   #    initialDelaySeconds: 30

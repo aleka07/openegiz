@@ -38,7 +38,7 @@ Delegated to executor agent → report: [arm64-audit.md](arm64-audit.md).
 ### Pending next
 - [x] k3s + Helm install on gx10-11 — done, see below
 - [x] arm64 fixes (extended-api rebuild, mongodb replacement) — done, see below
-- [ ] Deploy chart (with arm64 fixes; pure "as-is" cannot work on this hardware)
+- [x] Deploy chart (with arm64 fixes) — done, 14/14 Running, see "First deploy on k3s" below
 - [ ] Rebrand-lite (see plan above)
 - [ ] Close security hole before school: unauthenticated MongoDB on NodePort 30717 → switch `plainMongodb.service.type` to ClusterIP
 - [ ] pm4py venv, JaamSim (Java 8 present; decide X11 vs headless)
@@ -179,3 +179,374 @@ traefik-crd  kube-system  1         deployed  traefik-crd-40.1.4+up40.1.0  v3.7.
 
 Scope note: only k3s and Helm were installed. Docker, kernel, and everything else untouched;
 machine not rebooted; nothing committed to git.
+
+---
+
+## 2026-08-07 — First deploy on k3s
+
+First end-to-end install of the OpenEgiz Helm chart onto the k3s cluster built earlier today.
+**Result: 14/14 pods Running, `helm status` = `deployed`, all smoke checks green.**
+One real blocker was hit and fixed (a JVM/cgroup interaction that killed every Ditto service);
+it is written up in full below because it will bite anyone reinstalling on this class of machine.
+
+Release name `opentwins`, namespace `opentwins`. The name is load-bearing — several values
+reference resources derived from it (e.g. the configmap `opentwins-telegraf-real-config`), so
+renaming is a separate rebrand task, not something to do casually.
+
+### 1. Transfer the chart to the host
+
+```bash
+ssh gx10-11 'mkdir -p ~/openegiz-deploy/chart'
+rsync -a --delete --exclude .git \
+  "/Users/aleka/Projects/fall 2026/openegiz/" gx10-11:~/openegiz-deploy/chart/
+```
+114 MB transferred. The `mkdir` is needed first — rsync will not create a missing grandparent
+directory and fails with `mkdir ... failed: No such file or directory (2)`.
+
+Subcharts are vendored under `charts/`, so **`helm dependency build` was never run** and no
+upstream repo was contacted. Render check passed straight away:
+
+```bash
+ssh gx10-11 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+  cd ~/openegiz-deploy/chart && helm template opentwins . -n opentwins > /tmp/rendered.yaml'
+# exit 0, 4847 lines, no stderr
+```
+
+### 2. First install attempt — FAILED
+
+```bash
+ssh gx10-11 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+  cd ~/openegiz-deploy/chart && helm install opentwins . -n opentwins --create-namespace --timeout 20m'
+```
+
+```
+Error: INSTALLATION FAILED: failed post-install: 1 error occurred:
+	* timed out waiting for the condition
+real	20m1.112s
+```
+
+Everything except Ditto came up fine. All five Ditto JVM services crash-looped:
+
+```
+opentwins-ditto-connectivity-86cbf96cdc-qtnd8   0/1  CrashLoopBackOff  6
+opentwins-ditto-gateway-649459c9bf-t945g        0/1  CrashLoopBackOff  6
+opentwins-ditto-policies-5b4d65f477-xr5hn       0/1  CrashLoopBackOff  6
+opentwins-ditto-things-6d478759b9-7knrg         0/1  CrashLoopBackOff  6
+opentwins-ditto-thingssearch-ff45768d4-stz5c    0/1  CrashLoopBackOff  6
+opentwins-ditto-nginx-7dd6dc6dd7-zsjm9          0/1  Init:0/1          0
+```
+
+`ditto-nginx` sat in `Init:0/1` because its init container waits for the gateway. The helm
+failure itself came from the `post-install-ditto-default` hook, which polls Ditto for readiness
+and gives up:
+
+```
+INFO: Waiting for Ditto... (Attempt 30/30)
+FATAL: Timeout waiting for Ditto to become UP. Exiting.
+```
+
+So the hook was a **symptom**, not the cause. The cause was in the Ditto pods.
+
+### 3. Diagnosing the Ditto crash loop
+
+The container logs ended abruptly with no Java exception — the last line every time was:
+
+```
+"message":"SBR will be automatically enabled after <PT1H>","logger_name":"org.eclipse.ditto.base.service.cluster.DittoSplitBrainResolver"
+```
+
+Clean logs that just stop mean the process was killed rather than that it failed. `kubectl describe`
+confirmed it:
+
+```
+    Last State:     Terminated
+      Reason:       OOMKilled
+      Exit Code:    137
+      Started:      Fri, 07 Aug 2026 13:27:44 +0500
+      Finished:     Fri, 07 Aug 2026 13:27:45 +0500
+    Limits:
+      memory:  1Gi
+```
+
+**Killed one second after start.** All five services, identically.
+
+#### First hypothesis (wrong): the heap just doesn't fit in 1 GiB
+
+The chart sets `resources.memoryMi: 1024` as both request and limit, and passes
+`-XX:MaxRAMPercentage=60 -XX:InitialRAMPercentage=60` plus `-XX:MaxMetaspaceSize=256m`.
+That is ~614 MiB heap + 256 MiB metaspace = ~870 MiB before overhead, which looked tight
+enough to explain it. I raised the limit to 2 GiB on all five deployments:
+
+```bash
+for c in things thingssearch policies connectivity gateway; do
+  kubectl set resources deploy/opentwins-ditto-$c -n opentwins --limits=memory=2Gi --requests=memory=2Gi
+done
+```
+
+**Still OOMKilled at 2 GiB.** A limit that doubles with no effect means the JVM is not sizing
+itself from the limit at all, so the arithmetic above was never the real story.
+
+#### Actual root cause: the JVM ignores the cgroup v2 memory limit on this host
+
+Probed the real image directly (manifest at `/tmp/jvmprobe.yaml` on the host, container capped
+at 2 GiB):
+
+```
+=== cgroup ===
+2147483648            <- /sys/fs/cgroup/memory.max, correct, 2 GiB
+=== cgroup mount ===
+... /sys/fs/cgroup ro,... - cgroup2 cgroup rw,nsdelegate,memory_recursiveprot
+=== java version ===
+openjdk version "17.0.8.1" 2023-08-24 (Temurin-17.0.8.1+1)
+=== ergonomics ===
+   size_t InitialHeapSize  = 78383153152     {ergonomic}
+   size_t MaxHeapSize      = 78383153152     {ergonomic}
+ uint64_t MaxRAM           = 130596184064    {ergonomic}
+     bool UseContainerSupport = true         {command line}
+```
+
+The kernel exposes the limit correctly (`memory.max` = 2147483648, `/proc/self/cgroup` = `0::/`,
+cgroup v2, and k3s containerd runs `SystemdCgroup = true`). But the JDK reports
+**`MaxRAM = 130596184064`** — the full 121 GiB of *host* RAM — despite `UseContainerSupport=true`.
+It then applies `MaxRAMPercentage=60` to that and decides on a **73 GiB heap**, and because
+`InitialRAMPercentage=60` commits the heap up front, the JVM tries to allocate 73 GiB
+immediately and the kernel kills the container about a second in.
+
+This is why raising the k8s limit changed nothing: the JVM never looked at the limit.
+
+JDK 17.0.8.1 (aarch64, the JDK baked into `eclipse/ditto:3.3.7`) is the version that matters here
+— container-limit detection is failing on this kernel (6.17.0-1026-nvidia). I did not chase the
+exact JDK bug ID; the behaviour is reproducible and the workaround is solid.
+
+#### Fix: give the JVM an explicit `-XX:MaxRAM`
+
+`-XX:MaxRAM` sets the base the `*RAMPercentage` flags compute against, so the chart's existing
+percentage tuning starts behaving as intended. Verified with the same probe before touching the
+chart:
+
+```
+ uint64_t MaxRAM      = 2147483648    {command line}
+   size_t MaxHeapSize = 1289748480    {ergonomic}     <- 1.23 GiB, i.e. 60% of 2 GiB
+```
+
+`MaxHeapSize` went from 78383153152 to 1289748480. That is the fix.
+
+### 4. Chart edits (local repo is the source of truth)
+
+Both edits are in **`values.yaml`** only, under the `ditto:` block. No subchart files were
+touched, so `charts/ditto/` stays a clean vendored copy. Each edit carries a comment in the file
+explaining the reasoning.
+
+1. **`ditto.global.jvmOptions`** — restated the upstream default with `-XX:MaxRAM=2147483648`
+   added. It is a scalar, so overriding it means repeating the whole string; everything else is
+   verbatim from `charts/ditto/values.yaml`. This one setting covers all five JVM services,
+   because the subchart templates interpolate `global.jvmOptions` into `JAVA_TOOL_OPTIONS` for
+   each of them.
+
+2. **`resources.memoryMi: 2048`** on `things`, `thingsSearch`, `policies`, `connectivity`,
+   `gateway` (upstream default is 1024). Paired with the `MaxRAM` value above.
+
+> **Two traps worth remembering.**
+>
+> *The keys are inconsistently cased.* Four services use lowercase (`things`, `policies`,
+> `connectivity`, `gateway`) but thingssearch is **`thingsSearch`**. My first edit used
+> `thingssearch:` and Helm silently ignored it — no warning, no error, values that match no
+> subchart key are just dropped. Caught it by diffing rendered memory limits per deployment.
+> Always verify with `helm template | grep`, never assume an override landed.
+>
+> *`MaxRAM` and `memoryMi` are coupled.* `MaxRAM` is a hardcoded byte count that must match the
+> container limit. Change one without the other and the JVM sizes its heap against a limit the
+> container does not have — which is exactly the failure mode above. Both are commented in
+> `values.yaml` to say so.
+
+### 5. Clean-slate reinstall
+
+The failed release could not be upgraded in place (revision 1 never reached `deployed`), so it was
+torn down completely. Helm leaves two categories of resource behind, and both had to go:
+
+```bash
+helm uninstall opentwins -n opentwins
+#   -> "These resources were kept due to the resource policy: [PersistentVolumeClaim] opentwins-influxdb2"
+kubectl delete pvc --all -n opentwins        # incl. the influxdb2 PVC helm deliberately keeps
+kubectl delete job --all -n opentwins        # post-install hook job survives uninstall
+kubectl delete pod --all -n opentwins --force --grace-period=0
+```
+
+Deleting the PVCs was a deliberate part of the clean slate: InfluxDB had already run its
+one-time admin/bucket/token bootstrap against that volume, and reinstalling on top of an
+initialised volume is a known source of confusing second-run failures. Nothing of value was lost
+— Ditto never started, so MongoDB held no twin data.
+
+Then re-synced the corrected chart and reinstalled:
+
+```bash
+rsync -a --delete --exclude .git "/Users/aleka/Projects/fall 2026/openegiz/" gx10-11:~/openegiz-deploy/chart/
+ssh gx10-11 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+  cd ~/openegiz-deploy/chart && helm install opentwins . -n opentwins --create-namespace --timeout 20m'
+```
+
+```
+NAME: opentwins
+STATUS: deployed
+REVISION: 1
+real	0m57.161s
+```
+
+### 6. Convergence timeline
+
+| t | state |
+|---|---|
+| 0 s | `helm install` starts |
+| ~25 s | all 5 Ditto JVM services `Running` but `0/1`; nginx still `Init:0/1` |
+| ~50 s | **all 5 Ditto services `1/1 Ready`**, nginx `1/1`, Akka cluster formed |
+| 57 s | post-install hook passes, helm returns `deployed`, hook job auto-deleted |
+| 50–350 s | monitored for stability — **zero restarts** across all Ditto pods |
+
+Ditto converged in **under a minute**, not the 5–15 minutes expected. Worth flagging as a
+pleasant surprise rather than a reason for suspicion: health checks below confirm it is genuinely
+up. The 20-CPU / 121 GiB host is doing a lot of the work here.
+
+### 7. Final state
+
+```
+$ kubectl get pods -n opentwins
+NAME                                            READY   STATUS    RESTARTS        AGE
+opentwins-ditto-connectivity-6657f8cc8-rksrp    1/1     Running   0               8m37s
+opentwins-ditto-extended-api-779f9b9bcf-24f9c   1/1     Running   0               8m36s
+opentwins-ditto-fixer-5df89755ff-sqdc5          1/1     Running   0               8m37s
+opentwins-ditto-gateway-779c8fb776-fl7pr        1/1     Running   0               8m36s
+opentwins-ditto-nginx-6c8fd5d4db-g6h2k          1/1     Running   0               8m36s
+opentwins-ditto-policies-d78f7f79d-cbdfx        1/1     Running   0               8m37s
+opentwins-ditto-things-6cbbd58b94-xkcd6         1/1     Running   0               8m37s
+opentwins-ditto-thingssearch-5fcc86bdbc-z2sgm   1/1     Running   0               8m37s
+opentwins-grafana-55f4d66c6b-tg45n              3/3     Running   0               8m36s
+opentwins-influxdb2-0                           1/1     Running   0               8m36s
+opentwins-mongodb-0                             1/1     Running   0               8m36s
+opentwins-mosquitto-b9b6bb8c6-qbj9m             1/1     Running   0               8m37s
+opentwins-telegraf-667f549ffb-vb9tf             1/1     Running   2 (8m34s ago)   8m37s
+opentwins-unity-webgl-server-557d5c6749-5tzqx   1/1     Running   0               8m37s
+
+$ kubectl get svc -n opentwins
+NAME                           TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                         AGE
+opentwins-ditto-extended-api   NodePort    10.43.141.165   <none>        8080:30528/TCP                  8m37s
+opentwins-ditto-gateway        ClusterIP   10.43.58.164    <none>        8080/TCP                        8m37s
+opentwins-ditto-nginx          NodePort    10.43.68.111    <none>        8080:30525/TCP                  8m37s
+opentwins-grafana              NodePort    10.43.20.91     <none>        80:30718/TCP                    8m37s
+opentwins-influxdb2            NodePort    10.43.129.173   <none>        80:30716/TCP                    8m37s
+opentwins-mongodb              NodePort    10.43.49.185    <none>        27017:30717/TCP                 8m37s
+opentwins-mosquitto            NodePort    10.43.83.200    <none>        1883:30511/TCP,9001:31039/TCP   8m37s
+opentwins-unity-webgl-server   NodePort    10.43.246.197   <none>        80:30530/TCP                    8m37s
+```
+
+**Access map** (host is `192.168.0.135` on LAN, `10.66.66.24` over VPN):
+
+| Service | NodePort | Credentials |
+|---|---|---|
+| Ditto API (nginx) | 30525 | `ditto:ditto`, devops `devops:foobar` |
+| Ditto extended API | 30528 | none |
+| Grafana | 30718 | `admin:admin` |
+| InfluxDB 2 | 30716 | `admin` / `password`, org `opentwins`, bucket `default` |
+| MongoDB | 30717 | auth disabled |
+| Mosquitto MQTT | 30511 (+31039 ws) | auth disabled |
+| Unity WebGL server | 30530 | none |
+
+All credentials are the chart defaults and are fine for a LAN workshop box, but **none of this
+should be exposed beyond the LAN as-is** — every service is unauthenticated or uses a published
+default password, and the InfluxDB admin token is committed in `values.yaml`.
+
+### 8. Smoke checks — all green
+
+```bash
+# Ditto REST API
+$ curl -s -u ditto:ditto http://localhost:30525/api/2/things
+[]                                             # HTTP 200, empty array as expected
+
+# Ditto aggregate health
+$ curl -s -u devops:foobar http://localhost:30525/status/health
+top: UP
+  expected-roles UP    search UP    gateway UP
+  things UP            connectivity UP    policies UP
+
+# Grafana
+$ curl -sI http://localhost:30718/login
+HTTP/1.1 200 OK
+
+# both ertis plugins downloaded by the init container (needs outbound internet)
+$ kubectl exec -n opentwins deploy/opentwins-grafana -c grafana -- ls -1 /var/lib/grafana/plugins
+ertis-opentwins-app
+ertis-unity-panel
+grafana-exploretraces-app  grafana-lokiexplore-app
+grafana-metricsdrilldown-app  grafana-pyroscope-app
+
+# Grafana datasource auto-provisioned by the sidecar
+$ curl -s -u admin:admin http://localhost:30718/api/datasources
+  opentwins   influxdb   http://opentwins-influxdb2:80
+
+# extended API — responds; 404 on an unrouted path is the expected behaviour
+$ curl -s -o /dev/null -w '%{http_code}' http://localhost:30528/     -> 404
+
+# InfluxDB
+$ curl -s http://localhost:30716/health
+{"name":"influxdb","message":"ready for queries and writes","status":"pass","version":"v2.7.4"}
+
+# MongoDB
+$ kubectl exec -n opentwins opentwins-mongodb-0 -- mongosh --quiet --eval 'db.adminCommand({ping:1})'
+{"ok":1}
+databases: admin, config, ditto, local        # 'ditto' created => Ditto is really writing
+```
+
+**Ditto connections created by the post-install hook** (verified in MongoDB and via the devops
+piggyback API):
+
+```
+$ ... db.connection_journal.distinct("pid")
+connection:mosquitto-source-connection | connection:mosquitto-target-connection
+
+$ retrieveConnectionStatus, both connections:
+{"liveStatus": "open", "recoveryStatus": "succeeded", "connectionStatus": "open", "status": 200}
+```
+
+Only the two mosquitto connections exist, which is correct — the hono source connection is
+configured in `values.yaml` but `hono.enabled: false`, so it is skipped.
+
+### 9. Anomalies not worth fixing
+
+**`opentwins-telegraf` shows `RESTARTS 2`.** Benign startup race — telegraf came up before
+mosquitto was accepting TCP:
+
+```
+E! [telegraf] Error running agent: starting input inputs.mqtt_consumer:
+   network Error : dial tcp 10.43.83.200:1883: connect: connection refused
+```
+
+It self-healed on the third start and has been stable since; current logs show it connected to
+`outputs.influxdb_v2` and polling normally. The chart ships no init container or retry for this,
+so a couple of restarts on a cold install are expected. **It only stops being benign if the count
+keeps climbing** — a steady `RESTARTS` value with a healthy log is fine.
+
+### 10. Memory headroom (for future tuning)
+
+Steady-state usage against the new 2048 MiB limit:
+
+```
+opentwins-ditto-connectivity   751Mi        opentwins-ditto-things        537Mi
+opentwins-ditto-thingssearch   684Mi        opentwins-ditto-gateway       456Mi
+opentwins-ditto-policies       486Mi
+node total: 5676Mi / 121Gi (4%)
+```
+
+Everything sits well under 1 GiB on an idle cluster, so 2048 MiB is generous. It buys headroom
+for actual twin load, and the node has RAM to spare, so there is no reason to trim it. If someone
+does want to drop back to 1024, **`MaxRAM` must be changed to `1073741824` in the same commit** —
+see the trap note in §4.
+
+### 11. Scope notes
+
+- No git commits or pushes; `values.yaml` is modified in the working tree for review.
+- Nothing outside the `opentwins` namespace was touched. k3s, containerd, Docker and the kernel
+  were not modified; the machine was not rebooted.
+- No core component was disabled to make the deploy look green. Components that were already
+  disabled by default (hono, kafka, kafka-ml, strimzi, the example twin) stay disabled.
+- The locally built `openegiz/ditto-extended-api:arm64-b49663d` image was pulled from the k3s
+  containerd image store as intended — `pullPolicy: IfNotPresent`, no registry access, no
+  `ImagePullBackOff` at any point.
