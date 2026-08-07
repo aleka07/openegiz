@@ -32,7 +32,35 @@ Note: k3s bundles its own containerd. To import locally built images use `sudo k
 
 </details>
 
+## Fresh machine install
+
+On a clean aarch64 Ubuntu host, [`bootstrap.sh`](bootstrap.sh) does the whole path — k3s + Helm, the arm64 `ditto-extended-api` image, the Helm release, and a post-install smoke test — in one idempotent run:
+
+```bash
+# 1. put the repo on the host and create the credentials file
+mkdir -p ~/openegiz-deploy
+cp secrets.values.yaml.example ~/openegiz-deploy/secrets.values.yaml
+chmod 600 ~/openegiz-deploy/secrets.values.yaml
+$EDITOR ~/openegiz-deploy/secrets.values.yaml   # replace every CHANGE_ME
+                                                # openssl rand -base64 18
+
+# 2. run it from the repo checkout, on the host
+bash bootstrap.sh
+```
+
+Optional extras, both off by default: `--with-course-tools` (pm4py venv + JaamSim, see [docs/notes-course-tools.md](docs/notes-course-tools.md)) and `--with-bakery` (the bakery twins from [data-generator/bakery/](data-generator/bakery/)). Hermes is installed separately — [integrations/hermes/install.sh](integrations/hermes/install.sh).
+
+> [!IMPORTANT]
+> `values.yaml` ships deliberately **invalid** placeholders for every credential. [`secrets.values.yaml.example`](secrets.values.yaml.example) lists the nine keys a fresh install needs; the filled-in copy lives at `~/openegiz-deploy/secrets.values.yaml` (chmod 600) and is never committed. Every helm command must be given it with `-f`.
+
+> [!WARNING]
+> `bootstrap.sh` has **not yet been executed on a clean machine** — it is validated by review, `bash -n` and `helm template` only. Treat the first real run as supervised; every failure message points at the guide that explains the step.
+
+You still need to arrange two things yourself first (step 0 checks both and tells you how): passwordless sudo, and your user in the `docker` group. The full manual walkthrough is [docs/guides/01](docs/guides/01%20–%20Подготовка%20машины,%20k3s%20и%20Helm.md) → [02](docs/guides/02%20–%20Установка%20платформы%20на%20ARM64.md) → [03](docs/guides/03%20–%20Проверка%20и%20сквозной%20тест.md).
+
 ## Quick Start
+
+Once the platform is installed, day-to-day operation goes through the Makefile:
 
 ```bash
 make install     # helm release "opentwins" in namespace "opentwins"
@@ -49,7 +77,7 @@ make endpoints   # list service URLs (Grafana, Ditto, InfluxDB, MQTT)
 > store before install — build it once with [rebuild/extended-api/build.sh](rebuild/extended-api/build.sh).
 > Hono and Kafka-ML are disabled by default.
 
-Default credentials (LAN use only — change before any real deployment): Grafana `admin`/`admin`, Ditto `ditto`/`ditto`, InfluxDB `admin`/`password` (org `opentwins`, bucket `default`). MongoDB is exposed unauthenticated on a NodePort by default — set `plainMongodb.service.type: ClusterIP` to close it.
+Usernames are fixed — Grafana `admin`, Ditto `ditto` and `devops`, InfluxDB `admin` (org `opentwins`, bucket `default`). There are **no default passwords**: you generate them into `~/openegiz-deploy/secrets.values.yaml` before the first install (see [Fresh machine install](#fresh-machine-install)). MongoDB is `ClusterIP` and not exposed; Mosquitto and the extended API have no authentication, so this stand is LAN-only.
 
 ## Creating Digital Twins
 

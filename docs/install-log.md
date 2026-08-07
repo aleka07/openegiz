@@ -1596,3 +1596,111 @@ terminal {"command": "python3 ~/course/bakery/jaamsim/compare_runs.py"}
 - В InfluxDB добавился третий датасет `batch-0201..0220` (`mode=normal`, 160 событий) —
   демонстрационный прогон для runbook'а. Эталонный `batch-00xx` и грязный `batch-01xx`
   не тронуты; тетрадь по умолчанию читает `batch-00`.
+
+---
+
+## 2026-08-07 — Установка с нуля из репозитория: `bootstrap.sh` + `secrets.values.yaml.example`
+
+Мотивация: после ротации учётных данных (см. раздел «Security pass» выше) `values.yaml`
+содержит только заведомо невалидные плейсхолдеры, а реальные значения лежат исключительно
+на хосте. Для gx10-11 это правильно, но означало, что **из репозитория поставить платформу
+на новую машину нельзя** — не из чего узнать, какие ключи вообще нужны. Плюс путь
+«чистая машина → работающий стенд» был размазан по трём гайдам и Makefile'у.
+
+### Что добавлено
+
+**1. `secrets.values.yaml.example`** (корень репозитория) — ровно девять ключей,
+структура один в один с боевым `~/openegiz-deploy/secrets.values.yaml`. Структура снята
+с хоста скриптом, который печатает только пути ключей, подставляя `CHANGE_ME` вместо
+значений; ни одно реальное значение файл не покидало. Перекрёстно сверено с семью
+`REPLACE_ME_SEE_SECRETS_VALUES_FILE` в `values.yaml` и с `adminUser` сабчарта influxdb2.
+
+Расхождение семь против девяти объясняется двумя ключами `user:`, которых в `values.yaml`
+нет среди плейсхолдеров, но которые есть в оверрайде:
+
+```
+ditto.global.basicAuthUsers.ditto.user      = ditto     <- НЕ CHANGE_ME
+ditto.global.basicAuthUsers.ditto.password  = CHANGE_ME
+ditto.global.basicAuthUsers.devops.user     = devops    <- НЕ CHANGE_ME
+ditto.global.basicAuthUsers.devops.password = CHANGE_ME
+ditto.gateway.config.authentication.devops.devopsPassword = CHANGE_ME
+ditto.gateway.config.authentication.devops.statusPassword = CHANGE_ME
+grafana.adminPassword                       = CHANGE_ME
+influxdb2.adminUser.password                = CHANGE_ME
+influxdb2.adminUser.token                   = CHANGE_ME
+```
+
+**Имена пользователей намеренно оставлены литералами, а не `CHANGE_ME`.** Обе
+post-install-джобы создают connections с захардкоженным `authorizationContext`
+`"nginx:ditto"` (`post-install/ditto-mosquitto-connection/*.json`). Переименование
+пользователя `ditto` молча ломает обе MQTT-connection'а — auth-субъект перестаёт
+совпадать. В файле это записано отдельным предупреждением над ключом.
+
+Отдельно отмечено, что `grafana.adminPassword` и `influxdb2.adminUser.*` применяются
+**только при первом bootstrap** (дальше живут в PVC), — иначе первый же человек, который
+попробует сменить пароль правкой оверрайда, потратит час.
+
+**2. `bootstrap.sh`** (корень репозитория) — шесть идемпотентных шагов, каждый с
+проверкой и сообщением об ошибке, указывающим на конкретный гайд:
+
+| Шаг | Что делает | Как проверяет |
+|---|---|---|
+| 0 | preflight | `aarch64`, не root, `sudo -n true`, `docker info`, исходящий HTTPS, ≥20G на `/`, наличие `Chart.yaml` |
+| 1 | k3s (`--write-kubeconfig-mode 644`) + Helm | `kubectl wait --for=condition=Ready node`, пропуск если `systemctl is-active k3s` |
+| 2 | `rebuild/extended-api/build.sh` | пропуск, если `sudo k3s ctr images ls -q` уже содержит `arm64-b49663d`; после сборки повторная проверка |
+| 3 | секреты | отказ без файла + готовые команды копирования; отказ, если в файле остались `CHANGE_ME`; проверка YAML; `chmod 600` |
+| 4 | `helm upgrade --install` | сначала `helm template` вхолостую, затем ожидание 14/14 Running с таймаутом и дампом `describe`/`logs`/`events` по не-Running подам |
+| 5 | smoke | Ditto `/api/2/things` 200, Ditto `/status/health` 200, extended API `/api/twins/` 200, Grafana `/login` 200, Grafana `/api/datasources` содержит `opentwins`, InfluxDB `/health` 200 |
+
+Опциональные шаги по флагам, по умолчанию выключены: `--with-course-tools`
+(venv + pm4py + JaamSim с проверкой sha256 по `notes-course-tools.md`) и `--with-bakery`
+(`data-generator/bakery/create_twins.sh` + подсказка про `~/course/venv/bin/python
+simulator.py`). Hermes скрипт **не ставит** — в конце печатает указатель на
+`integrations/hermes/install.sh`.
+
+### Найдено по дороге: `grafanaPlugin.*URL` ломает любую машину кроме gx10-11
+
+`values.yaml` держит `grafanaPlugin.dittoURL` и `extendedURL` захардкоженными на
+`192.168.0.135`. Это фронтенд-плагин, он ходит в Ditto **из браузера пользователя**, так
+что cluster-internal DNS туда действительно не годится — но и чужой LAN-IP не годится
+тоже. На любой другой машине страница Twins молча покажет «No twins found».
+
+Скрипт читает InternalIP ноды и передаёт `--set grafanaPlugin.dittoURL=http://$IP:30525
+--set grafanaPlugin.extendedURL=http://$IP:30528`. Проверено, что оверрайды доезжают до
+рендера. Захардкоженное значение в `values.yaml` не тронуто — это дефолт для gx10-11.
+
+### Расхождение гайда и Makefile
+
+Makefile разводит `install` и `upgrade` на две цели. `bootstrap.sh` использует
+`helm upgrade --install` — единственную форму, которая идемпотентна и потому годится для
+скрипта, который можно перезапустить на полуустановленном хосте. Флаги (`--wait`,
+`--timeout`, `-n opentwins --create-namespace`, `-f` с оверрайдом) и прибитое имя релиза
+`opentwins` взяты из гайда 02 и Makefile'а без изменений.
+
+Мелочь из гайда 03: там extended API проверяется как `curl :30528/` → `404` («роут `/`
+не объявлен, но 404 вместо connection refused доказывает, что express слушает»). Для
+smoke-теста этого мало — 404 отдаст и полумёртвый сервис. Скрипт бьёт в
+`/api/twins/`, что на живом стенде даёт 200 (проверено на gx10-11 сегодня:
+`root=404 twins=200`). Оба факта записаны в комментарии рядом с проверкой.
+
+### Прочее
+
+- `.gitignore`: добавлены `secrets.values.yaml` и `CREDENTIALS.md` — защита от случайной
+  копии внутри чекаута. `secrets.values.yaml.example` под игнор не попадает (проверено
+  `git check-ignore`).
+- `README.md`: новый раздел «Fresh machine install». Заодно исправлен устаревший абзац
+  про дефолтные пароли — он всё ещё обещал `admin/admin`, `ditto/ditto`,
+  `admin/password` и NodePort у MongoDB, хотя всё это закрыто ротацией 2026-08-07.
+
+### Чего проверить не удалось
+
+**`bootstrap.sh` ни разу не запускался на чистой машине** — владелец сознательно
+отказался от живого теста. Проверено: `bash -n`, `helm template opentwins .
+-f secrets.values.yaml.example` (рендерится, 5291 строка, ни одного выжившего
+`REPLACE_ME`), парсинг примера как YAML, изолированный прогон printf-таблицы и
+awk-подсчёта подов на синтетическом выводе `kubectl`. `shellcheck` на рабочей машине
+отсутствует — статический анализ ограничен `bash -n` и вычиткой.
+
+Непроверяемое без чистой машины: установка k3s и Helm с нуля, ветка сборки образа в
+шаге 2 (на gx10-11 образ уже есть, отработает только ветка skip), реальное сведение
+14/14 на другом железе, ветка `--with-course-tools` (на gx10-11 venv уже стоит).

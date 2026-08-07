@@ -1,6 +1,12 @@
 get_helm.sh
 .venv
 venv
+
+# Credentials. The real file belongs at ~/openegiz-deploy/secrets.values.yaml
+# (chmod 600); this guard catches a stray copy inside the checkout.
+# secrets.values.yaml.example IS tracked — it holds only CHANGE_ME.
+secrets.values.yaml
+CREDENTIALS.md
 data-generator/lightbulb_generator.log
 data-generator/lightbulb_generator.pid
 data-generator/tdengine_solar_bridge.log
