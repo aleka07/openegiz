@@ -19,3 +19,5 @@ node_modules/
 data-generator/
 .gitignore
 scripts/
+# Rebranded Grafana plugin zips: fetched over HTTP at pod start, not needed in the chart package
+vendor/

@@ -357,10 +357,10 @@ grafana:
         set -euo pipefail
         mkdir -p /grafana-storage/plugins
         cd /grafana-storage/plugins
-        wget --no-cache --no-check-certificate -O ertis-opentwins-app.zip https://github.com/ertis-research/opentwins-in-grafana/releases/download/latest/ertis-opentwins-app.zip
+        wget --no-cache --no-check-certificate -O ertis-opentwins-app.zip https://raw.githubusercontent.com/aleka07/openegiz/main/vendor/grafana-plugins/ertis-opentwins-app.zip
         unzip -o ertis-opentwins-app.zip
         rm ertis-opentwins-app.zip
-        wget --no-cache --no-check-certificate -O ertis-unity-panel.zip https://github.com/ertis-research/grafana-panel-unity/releases/download/latest/ertis-unity-panel.zip
+        wget --no-cache --no-check-certificate -O ertis-unity-panel.zip https://raw.githubusercontent.com/aleka07/openegiz/main/vendor/grafana-plugins/ertis-unity-panel.zip
         unzip -o ertis-unity-panel.zip
         rm ertis-unity-panel.zip
     volumeMounts:

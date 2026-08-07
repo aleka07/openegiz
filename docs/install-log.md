@@ -39,7 +39,9 @@ Delegated to executor agent → report: [arm64-audit.md](arm64-audit.md).
 - [x] k3s + Helm install on gx10-11 — done, see below
 - [x] arm64 fixes (extended-api rebuild, mongodb replacement) — done, see below
 - [x] Deploy chart (with arm64 fixes) — done, 14/14 Running, see "First deploy on k3s" below
-- [ ] Rebrand-lite (see plan above)
+- [x] Rebrand-lite part 1: Grafana plugins vendored + rebranded — see "Rebrand-lite: Grafana plugins" below
+- [ ] Rebrand-lite part 2: Grafana login/nav logo + app title, config renames (topics/org/tenant opentwins→openegiz)
+- [ ] Logo: mark-only (square) variant for the 24px nav slot — current wordmark is unreadable that small
 - [ ] Close security hole before school: unauthenticated MongoDB on NodePort 30717 → switch `plainMongodb.service.type` to ClusterIP
 - [ ] pm4py venv, JaamSim (Java 8 present; decide X11 vs headless)
 - [ ] Hermes agent layer — last, after the stack is stable
@@ -550,3 +552,252 @@ see the trap note in §4.
 - The locally built `openegiz/ditto-extended-api:arm64-b49663d` image was pulled from the k3s
   containerd image store as intended — `pullPolicy: IfNotPresent`, no registry access, no
   `ImagePullBackOff` at any point.
+
+---
+
+## 2026-08-07 — End-to-end telemetry write-path test
+
+First write-path test of the stack. Everything before this was read-only health checking:
+pods green, endpoints answering. This section proves that a telemetry message actually
+travels the whole chain and comes out queryable in Grafana.
+
+**Result: all hops PASS.** No fixes were needed — the pipeline works as shipped.
+
+```
+MQTT publish → Ditto source connection → twin state in Ditto → Ditto target connection
+            → mosquitto opentwins/# → Telegraf → InfluxDB2 → Grafana datasource
+```
+
+### 1. The contract (read this first — course materials need it)
+
+Two things must line up: the **MQTT topic** and the **payload envelope**.
+
+**Topic:** `telemetry/<thingId>` — e.g. `telemetry/test:winterschool-1`.
+The Ditto source connection subscribes to `telemetry/#`. The `<thingId>` in the topic is
+cosmetic — Ditto routes on the `topic` field *inside* the payload, not on the MQTT topic.
+Keeping them consistent is convention, not a requirement.
+
+**Payload:** a raw **Ditto Protocol** envelope. There is **no payload mapper** on the source
+connection, so anything that is not valid Ditto Protocol is dropped. Minimal working form:
+
+```json
+{
+  "topic": "test/winterschool-1/things/twin/commands/modify",
+  "path": "/features",
+  "value": {
+    "temperature": {
+      "properties": {
+        "value": 42.5,
+        "timestamp": "2026-08-07T09:04:58Z"
+      }
+    }
+  }
+}
+```
+
+Envelope `topic` is `<namespace>/<name>/things/twin/commands/modify` — note the **`/`**
+separator between namespace and name, while the thing ID uses **`:`**
+(`test:winterschool-1` → `test/winterschool-1`). This is the single most common mistake.
+
+This matches exactly what `data-generator/data_generator.py` builds
+(`build_ditto_message()` / `MqttPublisher.topic`), so the generators in the repo are correct
+and can be used as-is.
+
+**The Thing must already exist in Ditto**, with a policy. A `modify` command against a
+non-existent thing does not create it through this path.
+
+### 2. Live configuration, as verified on the cluster
+
+`GET /api/2/connections` returns `[]` even though both connections exist and work — a known
+Ditto quirk (`retrieveAllConnections` does not enumerate sharded connection actors). Use the
+devops piggyback API instead:
+
+```bash
+curl -s -u devops:foobar -X POST \
+  "http://localhost:30525/devops/piggyback/connectivity?timeout=10s" \
+  -H "Content-Type: application/json" \
+  -d '{"targetActorSelection":"/system/sharding/connection","headers":{"aggregate":false},
+       "piggybackCommand":{"type":"connectivity.commands:retrieveConnection",
+                           "connectionId":"mosquitto-source-connection"}}'
+```
+
+Both connections are `"connectionStatus":"open"`:
+
+| Connection | Direction | Address |
+|---|---|---|
+| `mosquitto-source-connection` | in | subscribes `telemetry/#`, authCtx `nginx:ditto`, **no payload mapping** |
+| `mosquitto-target-connection` | out | publishes `opentwins/{{topic:channel}}/{{topic:criterion}}/{{thing:namespace}}/{{thing:name}}` |
+
+The target connection enriches events with
+`extraFields=thingId,attributes/_parents,features/idSimulationRun/properties/value`.
+That `extra.thingId` is **load-bearing** — Telegraf uses it as the InfluxDB tag.
+
+Telegraf (`cm/opentwins-telegraf-real-config`) consumes `opentwins/#` from
+`tcp://opentwins-mosquitto:1883`, parses `json_v2`, and writes to InfluxDB2
+org `opentwins` / bucket `default`. Field names are flattened from the event value:
+`value_temperature_properties_value`. Measurement is `mqtt_consumer`.
+
+Auth used: Ditto `ditto:ditto` (things/policies) and `devops:foobar` (connections) on
+NodePort 30525; Mosquitto NodePort 30511 (no auth); InfluxDB token from
+`secret/opentwins-influxdb2-auth` key `admin-token`.
+
+### 3. Test artifacts
+
+The default policy created by the post-install hook is `default:basic_policy` (subject
+`nginx:ditto`, full READ/WRITE) — reuse it, do not invent a new one.
+
+**Test Thing: `test:winterschool-1`. Left in place deliberately — it is useful for the course.**
+
+```bash
+curl -s -u ditto:ditto -X PUT \
+  -H "Content-Type: application/json" \
+  http://localhost:30525/api/2/things/test:winterschool-1 \
+  -d '{"policyId":"default:basic_policy",
+       "attributes":{"purpose":"e2e-write-path-test"},
+       "features":{"temperature":{"properties":{"value":0}}}}'
+# → HTTP 201
+```
+
+### 4. Publishing
+
+`mosquitto_pub` / `mosquitto_sub` are already present inside the mosquitto pod
+(`/usr/bin/`), so no client install is needed on the host:
+
+```bash
+kubectl exec -n opentwins deploy/opentwins-mosquitto -c mosquitto -- \
+  mosquitto_pub -h localhost -p 1883 \
+    -t 'telemetry/test:winterschool-1' \
+    -m '{"topic":"test/winterschool-1/things/twin/commands/modify",
+         "path":"/features",
+         "value":{"temperature":{"properties":{"value":42.5,
+                  "timestamp":"2026-08-07T09:04:58Z"}}}}'
+```
+
+From a laptop on the LAN the same works against `gx10-11:30511` — that is what the
+data-generator scripts do by default.
+
+### 5. Evidence per hop
+
+**Hop A — MQTT → Ditto twin state: PASS.**
+`GET /api/2/things/test:winterschool-1` right after the publish:
+
+```json
+{"thingId":"test:winterschool-1","policyId":"default:basic_policy",
+ "attributes":{"purpose":"e2e-write-path-test"},
+ "features":{"temperature":{"properties":{"value":42.5,"timestamp":"2026-08-07T09:04:58Z"}}}}
+```
+
+The feature moved from the seeded `0` to `42.5`.
+
+**Hop B — Ditto → mosquitto `opentwins/#`: PASS.**
+`mosquitto_sub -t 'opentwins/#' -v` running during the publish captured, on topic
+`opentwins/twin/events/test/winterschool-1`:
+
+```json
+{"topic":"test/winterschool-1/things/twin/events/modified",
+ "headers":{"ditto-originator":"nginx:ditto","response-required":false,"version":2,
+            "requested-acks":[],"content-type":"application/json"},
+ "path":"/features",
+ "value":{"temperature":{"properties":{"value":42.5,"timestamp":"2026-08-07T09:04:58Z"}}},
+ "extra":{"thingId":"test:winterschool-1"},
+ "revision":2,"timestamp":"2026-08-07T09:05:00.491024520Z"}
+```
+
+Note the topic expansion: `channel=twin`, `criterion=events`, `namespace=test`,
+`name=winterschool-1`. And `extra.thingId` is present, as Telegraf requires.
+
+**Hop C — Telegraf → InfluxDB2: PASS.**
+Telegraf log at the moment of the publish:
+
+```
+2026-08-07T09:05:00Z D! [parsers.json_v2::mqtt_consumer] the path "extra.attributes._parents" doesn't exist
+2026-08-07T09:05:00Z D! [parsers.json_v2::mqtt_consumer] the path "headers.correlation-id" doesn't exist
+2026-08-07T09:05:00Z D! [parsers.json_v2::mqtt_consumer] the path "extra.features.idSimulationRun.properties.value" doesn't exist
+2026-08-07T09:05:02Z D! [outputs.influxdb_v2] Wrote batch of 1 metrics in 4.652741ms
+```
+
+Those three `doesn't exist` lines are **harmless** — all three paths are declared
+`optional = true` in the Telegraf config. They appear for every twin that has no parent
+hierarchy and no simulation-run id, i.e. for most twins. Do not chase them.
+
+Three more points were published (43.7, 44.9, 46.1) to confirm a real series:
+
+```bash
+TOKEN=$(kubectl get secret -n opentwins opentwins-influxdb2-auth \
+          -o jsonpath='{.data.admin-token}' | base64 -d)
+kubectl exec -n opentwins opentwins-influxdb2-0 -- \
+  influx query --org opentwins --token "$TOKEN" --raw '
+    from(bucket: "default")
+      |> range(start: -1h)
+      |> filter(fn: (r) => r.thingId == "test:winterschool-1"
+                        and r._field == "value_temperature_properties_value")
+      |> keep(columns: ["_time","_value","thingId"])'
+```
+
+```
+,result,table,_time,_value,thingId
+,,0,2026-08-07T09:04:43.432808186Z,0,test:winterschool-1     ← the PUT that created the thing
+,,0,2026-08-07T09:05:00.508938666Z,42.5,test:winterschool-1
+,,0,2026-08-07T09:05:47.349029281Z,43.7,test:winterschool-1
+,,0,2026-08-07T09:05:53.541139617Z,46.1,test:winterschool-1
+,,0,2026-08-07T09:05:50.439413732Z,44.9,test:winterschool-1
+```
+
+Worth noticing: the first row is the **REST PUT**, not an MQTT message. Ditto emits a twin
+event for *any* state change regardless of origin, so the HTTP API is also a valid ingestion
+path into InfluxDB. Useful for the course when demonstrating that the twin — not the
+transport — is the source of truth.
+
+Full tag set on the measurement: `_measurement=mqtt_consumer`, `thingId`, `topic`,
+`originator=nginx:ditto`, `host=telegraf-polling-service`, and `correlationId` when present.
+
+**Hop D — Grafana reads it: PASS.**
+Queried through Grafana's own datasource proxy rather than trusting that the datasource
+merely exists:
+
+```bash
+curl -s -u admin:admin -X POST http://localhost:30718/api/ds/query \
+  -H 'Content-Type: application/json' \
+  -d '{"queries":[{"refId":"A","datasource":{"type":"influxdb","uid":"P4528D75AB74BE2EA"},
+       "query":"from(bucket: \"default\") |> range(start: -1h) |> filter(...)"}],
+       "from":"now-1h","to":"now"}'
+```
+
+```json
+"status":200,
+"data":{"values":[[1786093483432,1786093500508,1786093547349,1786093550439,1786093553541],
+                  [0,42.5,43.7,44.9,46.1]]}
+```
+
+Grafana returns the series with correct types (`time` + `float64`). The chain is complete.
+
+### 6. Failures and fixes
+
+None. No fix was applied, no chart or release change was made. The only non-obvious moment
+was `GET /api/2/connections` returning `[]`, which briefly looked like the connections had
+vanished; the piggyback API showed both open and healthy, and the write path then worked on
+the first attempt.
+
+### 7. Gotchas to carry into the course materials
+
+- Thing ID uses `:`, envelope topic uses `/`. `test:winterschool-1` → `test/winterschool-1`.
+- No payload mapper on the source connection: malformed payloads are silently dropped,
+  with no Ditto error visible to the publisher (QoS 0, no reply target used). Debug by
+  subscribing to `opentwins/#` and watching for the absence of an event.
+- The Thing must exist beforehand, with a policy. Reuse `default:basic_policy`.
+- Latency end to end is ~10 s, dominated by Telegraf's `flush_interval = "10s"`. That is
+  configuration, not a problem — but it will confuse anyone refreshing Grafana immediately.
+- Telegraf's `optional = true` paths log `doesn't exist` at debug level on every message.
+  Expected noise (`debug = true` is on in the shipped config).
+
+---
+
+## 2026-08-07 — Rebrand-lite: Grafana plugins vendored + rebranded
+
+Removed the runtime dependency on ertis-research GitHub releases and rebranded the visible plugin UI. Full details: [notes-rebrand-plugins.md](notes-rebrand-plugins.md).
+
+- Both plugin zips now live in [vendor/grafana-plugins/](../vendor/grafana-plugins/) (patched) with pristine upstream copies + sha256 in `upstream/` for provenance; grafana's init container wgets them from this repo's raw URLs instead of ertis releases (`.helmignore` excludes vendor/ from chart packaging).
+- `ertis-opentwins-app`: display name, README, in-app header `<h1>`, config-page text → OpenEgiz; logo (incl. the webpack-emitted header copy) → openegiz logo. Compiled-JS edits required recomputing SRI hashes in module.js — method verified against pristine upstream first; reproducible via `vendor/grafana-plugins/patch-branding.py` (aborts loudly if upstream drifts). Plugin id and `opentwins.agents/*` label keys deliberately untouched (functional).
+- `ertis-unity-panel`: README rebranded only; Unity logo kept (that panel has no OpenTwins branding, and the Unity mark aids identification in the panel picker).
+- ERTIS attribution and upstream links kept in plugin metadata/READMEs — the plugins are ERTIS's Apache-2.0 work; we rebrand the platform surface, not authorship.
+- Validation: per-entry sha256 diff vs upstream (only intended entries differ), `unzip -t` clean, `patch-branding.py --check` idempotent, `helm template` renders with zero `ertis-research` references.
