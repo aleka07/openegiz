@@ -386,9 +386,11 @@ hono:
 
 
 # OpenTwins recommended values for bitnami MongoDB
+# Disabled on arm64: bitnami/mongodb images are amd64-only, see plainMongodb below.
+# Keep `nameOverride` as is, the `opentwins.mongodb.fullname` helper reads it.
 ##################################################################
 mongodb:
-  enabled: true
+  enabled: false
   nameOverride: mongodb
   service:
     type: NodePort
@@ -410,6 +412,26 @@ mongodb:
       tag: 11-debian-11-r72
 
 
+# Minimal plain-Kubernetes MongoDB (official image, multi-arch incl. arm64).
+# Replaces the bitnami sub chart above. The Service is named after the
+# `opentwins.mongodb.fullname` helper, so every existing consumer
+# (ditto-mongodb-connection-secret, extended API, hono device registry)
+# keeps resolving the same host name and port.
+##################################################################
+plainMongodb:
+  enabled: true
+  image: mongo:6.0
+  imagePullPolicy: IfNotPresent
+  service:
+    type: NodePort
+    port: 27017
+    nodePort: 30717
+  persistence:
+    storageClass: local-path
+    size: 8Gi
+  resources: {}
+
+
 # Unity WebGL Server
 ##################################################################
 unityWebglServer:
@@ -426,8 +448,11 @@ unityWebglServer:
 extendedAPI:
   enabled: true
   image:
-    repository: ertis/ditto-extended-api
-    tag: latest
+    # Built locally on the ARM64 host from ertis-research/extended-api-for-eclipse-ditto
+    # (see rebuild/extended-api/); upstream ertis/ditto-extended-api is amd64-only.
+    repository: openegiz/ditto-extended-api
+    tag: arm64-b49663d
+    pullPolicy: IfNotPresent
   allLogs: false
   service:
     port: 8080

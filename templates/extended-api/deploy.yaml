@@ -22,7 +22,7 @@ spec:
       containers:
       - name: ditto-extended-api
         image: {{ printf "%s:%s" .Values.extendedAPI.image.repository .Values.extendedAPI.image.tag }}
-        imagePullPolicy: Always
+        imagePullPolicy: {{ .Values.extendedAPI.image.pullPolicy | default "IfNotPresent" }}
         env: 
         - name: HOST 
           value: "localhost" 
@@ -42,7 +42,6 @@ spec:
           value: {{ coalesce ((((.Values.extendedAPI.ditto).credentials).devops).password) .Values.ditto.gateway.config.authentication.devops.devopsPassword "foobar" }} 
         - name: ALL_LOGS
           value: {{ coalesce .Values.extendedAPI.allLogs false }}
-        imagePullPolicy: Always
         ports:
         - containerPort: 8080
           protocol: TCP
