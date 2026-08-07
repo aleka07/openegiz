@@ -330,6 +330,14 @@ grafana:
   enabled: true # Value added by OpenTwins to indicate if this component should be installed or not
   persistence:
     enabled: true
+  # The chart's init-chown-data runs as root with all capabilities dropped
+  # except CHOWN. On a fresh PVC that works, but once Grafana has created
+  # its csv/pdf/png subdirs (mode 700, uid 472), recursive chown can no
+  # longer traverse them without CAP_DAC_OVERRIDE — every upgrade after
+  # first install then crashloops in Init. Ownership is already correct
+  # (fsGroup 472), so the chown pass is unnecessary.
+  initChownData:
+    enabled: false
   service:
     type: NodePort
     nodePort: 30718

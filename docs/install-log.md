@@ -801,3 +801,16 @@ Removed the runtime dependency on ertis-research GitHub releases and rebranded t
 - `ertis-unity-panel`: README rebranded only; Unity logo kept (that panel has no OpenTwins branding, and the Unity mark aids identification in the panel picker).
 - ERTIS attribution and upstream links kept in plugin metadata/READMEs — the plugins are ERTIS's Apache-2.0 work; we rebrand the platform surface, not authorship.
 - Validation: per-entry sha256 diff vs upstream (only intended entries differ), `unzip -t` clean, `patch-branding.py --check` idempotent, `helm template` renders with zero `ertis-research` references.
+
+---
+
+## 2026-08-07 — Rebrand deploy + grafana initChownData crashloop
+
+Helm upgrade to pick up the vendored plugins hit a **pre-existing grafana-chart landmine**: the new pod crashlooped in `Init:Error` on `init-chown-data` with `chown: /var/lib/grafana/pdf: Permission denied` (old pod kept serving — no outage).
+
+Root cause: `init-chown-data` runs as root but the chart drops ALL capabilities except `CHOWN`. On a **fresh** PVC there is nothing to recurse into, so first install works. At runtime Grafana creates `csv/`, `pdf/`, `png/` with mode 700 owned by uid 472 — recursing into a 700 directory you don't own requires `CAP_DAC_OVERRIDE`, which was dropped. So **every upgrade after first install** fails in Init. Ownership is already correct via `fsGroup: 472`, making the chown pass useless here → fixed with `grafana.initChownData.enabled: false` (commented in values.yaml). Upgrade then converged in 20 s.
+
+Verification of the rebranded plugins in the live cluster:
+- init container fetched both zips from `raw.githubusercontent.com/aleka07/openegiz` (vendored copies)
+- `plugin.json` name = **OpenEgiz**; `396.js` header string patched; Grafana API `/api/plugins/ertis-opentwins-app/settings` → `name: OpenEgiz, enabled: true, pinned: true`
+- 14/14 pods Running (release revision 3)
