@@ -814,3 +814,144 @@ Verification of the rebranded plugins in the live cluster:
 - init container fetched both zips from `raw.githubusercontent.com/aleka07/openegiz` (vendored copies)
 - `plugin.json` name = **OpenEgiz**; `396.js` header string patched; Grafana API `/api/plugins/ertis-opentwins-app/settings` → `name: OpenEgiz, enabled: true, pinned: true`
 - 14/14 pods Running (release revision 3)
+
+---
+
+## 2026-08-07 — Course tools: pm4py + JaamSim
+
+The two remaining course tools installed on `gx10-11` as plain user-space installs, deliberately **outside** k3s. Nothing in the cluster, Docker, or `update-alternatives` was touched; no reboot. Full re-setup instructions: [notes-course-tools.md](notes-course-tools.md) (mirrored on the host at `~/course/README.md`).
+
+Host: Ubuntu 24.04, aarch64, Python 3.12.3, OpenJDK 1.8.0_492, 20 CPU / 121 GB RAM.
+
+### 1. pm4py — process mining
+
+```bash
+sudo apt-get install -y graphviz          # `dot` binary for process-map rendering
+mkdir -p ~/course && python3 -m venv ~/course/venv
+~/course/venv/bin/pip install --upgrade pip setuptools wheel
+~/course/venv/bin/pip install pm4py pandas matplotlib jupyterlab paho-mqtt influxdb-client
+```
+
+`python3-venv` was already present, so no extra apt install was needed there. Every package resolved to a prebuilt **aarch64 wheel** — no source builds, whole install took 68 s. That was the main risk going in (pm4py pulls `cvxopt` and `scipy`, both of which would be miserable to compile on ARM) and it did not materialise.
+
+Versions: **pm4py 2.7.23.3**, pandas 3.0.5, numpy 2.5.1, scipy 1.18.0, cvxopt 1.3.3, networkx 3.6.1, matplotlib 3.11.1, jupyterlab 4.6.2, paho-mqtt 2.1.0, influxdb-client 1.50.0, graphviz-python 0.21, system graphviz 2.42.2-9ubuntu0.1 (`dot` reports 2.43.0).
+
+`paho-mqtt` + `influxdb-client` are the loop-facing pieces: MQTT for live event ingestion, InfluxDB for pulling the historical event log the miner runs against.
+
+Pinned sets written to `~/course/requirements.txt` (6 top-level lines) and `~/course/requirements-frozen.txt` (112 pinned lines from `pip freeze`).
+
+**Functional check** — `~/course/pm4py_check.py` builds a 19-row synthetic event log (4 cases, 7 activities, columns `case:concept:name` / `concept:name` / `time:timestamp`) via `pm4py.format_dataframe`, then runs the inductive miner, token-based replay, DFG discovery, and a graphviz PNG export:
+
+```
+rows=19 cases=4 activities=7
+PETRI NET: places=7 transitions=8 arcs=16
+initial_marking=['source:1'] final_marking=['sink:1']
+visible transitions: ['Backorder','Cancel','Check Stock','Invoice','Pack','Receive Order','Ship']
+fitness (token-based replay): {'perc_fit_traces': 100.0, 'average_trace_fitness': 1.0, 'log_fitness': 1.0}
+DFG edges=7 start={'Receive Order': 4} end={'Invoice': 3, 'Cancel': 1}
+rendered PNG bytes: 44783
+PM4PY FUNCTIONAL CHECK OK
+```
+
+All 7 activities came back as labelled transitions and the DFG edge count (7) matches the 7 distinct directly-follows pairs in the input by hand, so this is a real discovery result, not an import smoke test. The PNG export additionally proves the graphviz path works headless. Fitness 1.0 is expected and is *not* evidence of a good model — the inductive miner guarantees perfect replay of its own input log.
+
+Two cosmetic surprises worth knowing before a lab: pm4py prints a large AGPL licensing banner to stderr on import, and token-based replay writes a tqdm progress bar. Both will show up in student notebooks.
+
+### 2. JaamSim — discrete-event simulation
+
+**JaamSim 2026-05** (tag `v2026-05`, published 2026-07-06 — the current latest stable):
+
+```bash
+mkdir -p ~/course/jaamsim && cd ~/course/jaamsim
+curl -sSL -O https://github.com/jaamsim/jaamsim/releases/download/v2026-05/JaamSim2026-05.jar
+# sha256 be8229bbe0a545e1e4a10338aa66dfd3c9e23d933c6f65bc3baa904d6f8fceb9, 19533050 bytes
+```
+
+**Java decision: the stock OpenJDK 8 already on the host runs the newest JaamSim, so nothing was installed.** The manifest reads `Created-By: 25+36-LTS (Eclipse Adoptium)` and carries `Enable-Native-Access`, which looks like a Java 24+ requirement — but that only records the JDK that *built* the jar. Checking the actual class file header (`od -An -tu1 -N8` on `JaamSimModel.class`) gives major version **52 = Java 8 target**. Confirmed empirically by running it. So `openjdk-17-jre-headless` was **not** installed and `update-alternatives` was **not** touched: newest JaamSim, zero system change.
+
+**Failure 1 — `-h` and the batch flags.** `java -jar JaamSim2026-05.jar -h` printed nothing at all and exited 0; there is no usage text. Recovered the real flag list by extracting `com/jaamsim/ui/GUIFrame.class` from the jar and running `strings` on it: `-batch`, `-script`, `-zbuffer`, `-headless`, `-quiet`, `-safe_graphics`, `-optional_graphics`.
+
+**Failure 2 — `-batch` is not headless.** Both `-b` and `-batch` still construct the Swing GUI and die:
+
+```
+Exception in thread "main" java.awt.HeadlessException:
+No X11 DISPLAY variable was set, but this program performed an operation which requires it.
+	at com.jaamsim.ui.GUIFrame.createInstance(GUIFrame.java:482)
+```
+
+Only **`-headless`** skips the GUI. Nastiest part: these failures **exit with status 0**, so a CI/script wrapper cannot rely on the exit code — it has to assert that the `.rep`/`.dat` files were actually created.
+
+**Failure 3 — silent bad output names.** The first `CourseLine.cfg` used `[WaitQueue].TimeAverage` in `RunOutputList`. That output does not exist, and rather than erroring JaamSim wrote the *literal expression text* into the data column for every row. Fixed to `[WaitQueue].QueueLengthAverage`. Lesson for the lab handout: always eyeball the `.dat` header row against its values.
+
+**Working headless run:**
+
+```bash
+cd ~/course/jaamsim/models
+java -jar ~/course/jaamsim/JaamSim2026-05.jar CourseLine.cfg -headless
+```
+
+`models/CourseLine.cfg` is a minimal `EntityGenerator → Queue → Server → Statistics → EntitySink` line with no graphics blocks at all, `PrintReport TRUE`, and 3 replications. Output, produced next to the cfg with no display present:
+
+- `CourseLine.rep` (17 208 B) — full per-replication report: state times, utilisation, queue-length distribution and cumulative fractions, statistics-collector summary
+- `CourseLine.dat` (419 B) — one row per replication for the `RunOutputList` entries plus a mean ± std row
+
+```
+Scenario Replication [PartStats].SampleAverage/1[min]  [WaitQueue].QueueLengthAverage  [Machine].Utilisation
+1        1           2.346238757658468                1.5293214293516755              0.7913585537183333
+1        2           2.4753701582103385               1.6793641707416689              0.8029958646016666
+1        3           2.594805740438258                1.8251774990700023              0.8140866982783332
+1                    2.4721382187690213  0.3088…      1.6779543663877823  0.3675…     0.8028137055327778  0.0282…
+```
+
+Correctness check, not just "a file appeared": arrivals are exponential with mean 1 min and service is uniform on [0.70, 0.90] min, so ρ = λ·E[S] = **0.80** analytically. Measured **0.8028 ± 0.0282** across replications, and ~9.9–10.2k parts through the sink per 10 000-min run. The simulator is genuinely simulating.
+
+Useful extras shipped inside the jar: `unzip -l …jar 'resources/examples/*'` gives ~20 ready-made teaching models (Factory Example with its 10 progressive variants, Job Shop, Cafe), and `resources/documents/JaamSim User Manual.pdf` is the full manual.
+
+### 3. GUI note for the course
+
+The verification above covers **headless batch only** — model execution, reports, replications, parameter sweeps. It does **not** cover the JaamSim model editor, which is Swing + OpenGL. Two options for students who need to build or edit models:
+
+1. `ssh -X gx10-11` with an X server on the student's own machine (XQuartz on macOS, VcXsrv/X410 on Windows). *Nothing was installed on the Mac and this path was not tested.* The 3D view is OpenGL, so expect software-rendering slowness over X11; `-safe_graphics` mitigates.
+2. Run the same jar locally on the laptop (cross-platform, JRE only). Recommended for authoring; keep gx10-11 for headless batch runs.
+
+JupyterLab for the pm4py labs should be bound to loopback and reached over a tunnel, never exposed: `jupyter lab --no-browser --ip=127.0.0.1 --port=8888` + `ssh -L 8888:127.0.0.1:8888 gx10-11`.
+
+### 4. Resulting layout
+
+```
+~/course/
+├── README.md                 # re-setup instructions (mirrored to docs/notes-course-tools.md)
+├── requirements.txt          # 6 top-level deps
+├── requirements-frozen.txt   # 112 pinned lines
+├── pm4py_check.py            # functional smoke test
+├── venv/
+└── jaamsim/
+    ├── JaamSim2026-05.jar
+    └── models/CourseLine.cfg (+ .rep, .dat from the verification run)
+```
+
+Note: the SSH session to `gx10-11` dropped (100% packet loss to 192.168.0.135) shortly after the final `ls` confirmed this layout. Unrelated to the work — no reboot or service change was made from this session; both installs are pure user-space files under `~/course`.
+
+---
+
+## 2026-08-07 — Real power-loss recovery test + hardening
+
+The whole GX10 fleet lost power mid-day — an unplanned but perfect resilience test.
+
+### What recovered by itself (zero manual intervention) ✅
+- k3s + docker: systemd `enabled`, both `active` after boot; node Ready.
+- **All 14 pods returned to Running on their own.** Restart counts: most =1 (the boot), grafana =3 / telegraf =4 — benign startup races (deps not yet listening), self-healed.
+- Data survived: Ditto twin `test:winterschool-1` (temp 46.1) intact in MongoDB; InfluxDB series intact; Grafana DB + plugins intact. Mongo (WiredTiger journal), InfluxDB (WAL) and k3s kine (SQLite) are crash-safe by design; dmesg shows zero ext4 errors.
+- Locally built `openegiz/ditto-extended-api` image survived in k3s containerd store (it lives on disk under /var/lib/rancher).
+- NTP re-synced (matters for the time-series data).
+
+### Quirk observed
+After the outage the host kept LAN IP 192.168.0.135 but was reachable only via VPN (10.66.66.24) from the workstation — LAN path issue outside the machine (office network also power-cycled?). Both ssh aliases exist; scripts should prefer trying both.
+
+### Hardening applied: Grafana plugin init no longer needs internet at boot
+Pre-existing single point of failure (made worse by any network being down after a power cut): the plugin init container `wget`s both zips on **every** pod start and used `set -e` — no network ⇒ Grafana never starts. New script (values.yaml): fresh download when reachable; else fall back to the copy already unpacked on the PVC (WARN); fail only if neither exists. Deployed as release revision 4, converged in 20 s.
+
+Fallback verified for real, not just by reading the code: ran the script in busybox with `--network none` and a fake cached plugin dir → `WARN … keeping cached copy` + continue for the cached one, hard ERROR for the uncached one. In production both plugins are cached on the PVC after the first successful start, so a fully offline boot proceeds.
+
+### Conclusion
+The stack is safe against sudden power-offs: everything auto-starts, storage layers are journaled, and the one runtime internet dependency now degrades gracefully. Remaining external factor: BIOS "restore on AC power" (machine did come back by itself this time) and the office LAN, neither controllable from the OS.

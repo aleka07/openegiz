@@ -362,15 +362,24 @@ grafana:
       - -c
       - |
         #!/bin/sh
-        set -euo pipefail
+        # No `set -e`: a failed download must NOT block Grafana startup when a
+        # previously unpacked copy of the plugin already exists on the PVC
+        # (e.g. booting after a power loss with no network). Fresh download
+        # wins when reachable; cached copy is the fallback; only fail hard if
+        # there is neither.
         mkdir -p /grafana-storage/plugins
         cd /grafana-storage/plugins
-        wget --no-cache --no-check-certificate -O ertis-opentwins-app.zip https://raw.githubusercontent.com/aleka07/openegiz/main/vendor/grafana-plugins/ertis-opentwins-app.zip
-        unzip -o ertis-opentwins-app.zip
-        rm ertis-opentwins-app.zip
-        wget --no-cache --no-check-certificate -O ertis-unity-panel.zip https://raw.githubusercontent.com/aleka07/openegiz/main/vendor/grafana-plugins/ertis-unity-panel.zip
-        unzip -o ertis-unity-panel.zip
-        rm ertis-unity-panel.zip
+        for P in ertis-opentwins-app ertis-unity-panel; do
+          if wget --no-cache --no-check-certificate -O "$P.zip" "https://raw.githubusercontent.com/aleka07/openegiz/main/vendor/grafana-plugins/$P.zip"; then
+            unzip -o "$P.zip" && rm "$P.zip"
+          elif [ -d "$P" ]; then
+            echo "WARN: download of $P failed, keeping cached copy on PVC"
+            rm -f "$P.zip"
+          else
+            echo "ERROR: $P unavailable: download failed and no cached copy" >&2
+            exit 1
+          fi
+        done
     volumeMounts:
     - name: storage
       mountPath: /grafana-storage
