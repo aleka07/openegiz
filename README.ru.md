@@ -15,6 +15,8 @@
 
 Основано на [OpenTwins](https://github.com/ertis-research/opentwins) (ERTIS Research, Университет Малаги). Этот форк добавляет развёртывание через Compose со сквозным smoke-тестом, поддержку ARM64, вендоренные Grafana-плагины (без зависимости от чужих релизов в рантайме), исправления стабильности и [Пример рудника](examples/mine/README.ru.md).
 
+**Если OpenEgiz вам пригодился, поставьте репозиторию ⭐ звезду** — так проект находят другие люди и компании.
+
 ## Быстрый старт (Docker Compose)
 
 **Что нужно:** Docker с Compose v2.20+ (Docker Desktop на macOS/Windows, Docker Engine на Linux), `git`, `make` и **6 ГБ памяти для Docker** (сам стенд занимает около 3,2 ГБ). Работает на amd64 и arm64. На Windows команды выполняются внутри WSL2 — этот вариант пока не проверен.
@@ -206,7 +208,11 @@ bash bootstrap.sh
 | `vendor/grafana-plugins/` | Вендоренные и ребрендированные Grafana-плагины ERTIS |
 | `rebuild/extended-api/` | Воспроизводимая arm64-сборка образа Ditto extended API |
 | `build/` | Сборка Unity WebGL для панели Unity |
-| `docs/` | Гайды, журнал установки, аудит ARM64, рабочие заметки |
+| `docs/` | Гайды по Helm, журнал установки, инженерные заметки — см. [docs/README.md](docs/README.md). Для быстрого старта на Compose не нужны |
+
+## Как помочь проекту
+
+Баг-репорты и pull request-ы приветствуются — см. [CONTRIBUTING.md](CONTRIBUTING.md) (там же раздел на русском).
 
 ## Лицензия
 

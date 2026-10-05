@@ -1,0 +1,60 @@
+name: Bug report
+description: Something does not install, start or work as the README says
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Можно писать по-русски.
+
+        **Remove passwords before pasting logs** — `make up` prints them, and `deploy/compose/.env` holds them.
+        **Уберите пароли из логов перед вставкой.**
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      options:
+        - Docker Compose (make up)
+        - Helm on k3s
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: OpenEgiz version
+      description: Release tag or commit — output of `git describe --tags --always`
+      placeholder: v1.0.0-rc.1
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What you ran and what happened
+      description: Exact commands, the error text, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        OS and CPU architecture (e.g. Ubuntu 24.04 amd64, Windows 11 + WSL2 Ubuntu-24.04, macOS arm64), and the output of:
+        `docker version`, `docker compose version`
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: status
+    attributes:
+      label: Service status and logs
+      description: Output of `make ps`, and `make logs S=<service>` for the failing service if there is one.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for this problem
+          required: true
+        - label: I removed passwords and tokens from everything above
+          required: true
