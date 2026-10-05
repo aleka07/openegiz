@@ -3,7 +3,7 @@
 Chronological log of every setup step for the Winter School environment.
 Rule: record everything — failures with their error messages and fixes, successes with the exact commands. This file is the raw material for the course's "Session 0" (reproducible installation guide).
 
-Target machine: **gx10-11** (ASUS Ascent GX10, aarch64 / Grace Blackwell, Ubuntu 24.04.4, 121 GB unified RAM, ~820 GB NVMe free). Access: `ssh gx10-11` (LAN, 192.168.0.135) or `ssh vpn-gx10-11` (10.66.66.24). Note: actual hostname reports as `gx10-7897`.
+Target machine: **gx10-11** (ASUS Ascent GX10, aarch64 / Grace Blackwell, Ubuntu 24.04.4, 121 GB unified RAM, ~820 GB NVMe free). Access: `ssh gx10-11` (LAN, <host-ip>) or `ssh vpn-gx10-11` (<vpn-ip>). Note: actual hostname reports as `gx10-7897`.
 
 ---
 
@@ -149,7 +149,7 @@ exporting `KUBECONFIG=/etc/rancher/k3s/k3s.yaml` explicitly, or use `ssh ... 'ba
 ```
 $ kubectl get nodes -o wide
 NAME        STATUS   ROLES           AGE   VERSION        INTERNAL-IP     EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION               CONTAINER-RUNTIME
-gx10-7897   Ready    control-plane   82s   v1.36.3+k3s1   192.168.0.135   <none>        Ubuntu 24.04.4 LTS   6.17.0-1026-nvidia (arm64)   containerd://2.3.2-k3s2
+gx10-7897   Ready    control-plane   82s   v1.36.3+k3s1   <host-ip>   <none>        Ubuntu 24.04.4 LTS   6.17.0-1026-nvidia (arm64)   containerd://2.3.2-k3s2
 
 $ kubectl get pods -A
 NAMESPACE     NAME                                      READY   STATUS      RESTARTS      AGE
@@ -440,7 +440,7 @@ opentwins-mosquitto            NodePort    10.43.83.200    <none>        1883:30
 opentwins-unity-webgl-server   NodePort    10.43.246.197   <none>        80:30530/TCP                    8m37s
 ```
 
-**Access map** (host is `192.168.0.135` on LAN, `10.66.66.24` over VPN):
+**Access map** (host is `<host-ip>` on LAN, `<vpn-ip>` over VPN):
 
 | Service | NodePort | Credentials |
 |---|---|---|
@@ -930,7 +930,7 @@ JupyterLab for the pm4py labs should be bound to loopback and reached over a tun
     └── models/CourseLine.cfg (+ .rep, .dat from the verification run)
 ```
 
-Note: the SSH session to `gx10-11` dropped (100% packet loss to 192.168.0.135) shortly after the final `ls` confirmed this layout. Unrelated to the work — no reboot or service change was made from this session; both installs are pure user-space files under `~/course`.
+Note: the SSH session to `gx10-11` dropped (100% packet loss to <host-ip>) shortly after the final `ls` confirmed this layout. Unrelated to the work — no reboot or service change was made from this session; both installs are pure user-space files under `~/course`.
 
 ---
 
@@ -946,7 +946,7 @@ The whole GX10 fleet lost power mid-day — an unplanned but perfect resilience 
 - NTP re-synced (matters for the time-series data).
 
 ### Quirk observed
-After the outage the host kept LAN IP 192.168.0.135 but was reachable only via VPN (10.66.66.24) from the workstation — LAN path issue outside the machine (office network also power-cycled?). Both ssh aliases exist; scripts should prefer trying both.
+After the outage the host kept LAN IP <host-ip> but was reachable only via VPN (<vpn-ip>) from the workstation — LAN path issue outside the machine (office network also power-cycled?). Both ssh aliases exist; scripts should prefer trying both.
 
 ### Hardening applied: Grafana plugin init no longer needs internet at boot
 Pre-existing single point of failure (made worse by any network being down after a power cut): the plugin init container `wget`s both zips on **every** pod start and used `set -e` — no network ⇒ Grafana never starts. New script (values.yaml): fresh download when reachable; else fall back to the copy already unpacked on the PVC (WARN); fail only if neither exists. Deployed as release revision 4, converged in 20 s.
@@ -1661,7 +1661,7 @@ simulator.py`). Hermes скрипт **не ставит** — в конце пе
 ### Найдено по дороге: `grafanaPlugin.*URL` ломает любую машину кроме gx10-11
 
 `values.yaml` держит `grafanaPlugin.dittoURL` и `extendedURL` захардкоженными на
-`192.168.0.135`. Это фронтенд-плагин, он ходит в Ditto **из браузера пользователя**, так
+`<host-ip>`. Это фронтенд-плагин, он ходит в Ditto **из браузера пользователя**, так
 что cluster-internal DNS туда действительно не годится — но и чужой LAN-IP не годится
 тоже. На любой другой машине страница Twins молча покажет «No twins found».
 

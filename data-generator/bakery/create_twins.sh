@@ -6,7 +6,7 @@
 # $DITTO_PASSWORD if you export it yourself.
 #
 #   bash ~/course/bakery/create_twins.sh
-#   DITTO_URL=http://192.168.0.135:30525 bash create_twins.sh   # from a laptop
+#   DITTO_URL=http://<host-ip>:30525 bash create_twins.sh   # from a laptop
 #
 # PUT is idempotent for the thing document, but it OVERWRITES current feature
 # values back to 0. That is intentional — it is the "reset the line" button.

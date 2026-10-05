@@ -13,7 +13,7 @@
 ## 1. Что было на входе
 
 - Hermes Agent v0.20.0 (2026.8.3), установка git, `~/.hermes/`, venv на Python 3.11.15.
-- Модель уже настроена: провайдер `custom` → vLLM `http://192.168.0.145:8000/v1`,
+- Модель уже настроена: провайдер `custom` → vLLM `http://<llm-host-ip>:8000/v1`,
   модель `morosystems/ThinkingCap-Qwen3.6-27B-NVFP4`, tool calling работает.
 - Стек: Ditto `:30525`, MQTT `:30511`, InfluxDB2 `:30716`, JaamSim CLI, pm4py venv.
 - Тестовый двойник `test:winterschool-1` с фичей `temperature`.
