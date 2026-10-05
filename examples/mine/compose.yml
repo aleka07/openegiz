@@ -14,9 +14,16 @@ services:
       init:
         condition: service_completed_successfully
 
+  # Same image as mine-setup, which builds it. Only one service may have
+  # `build:` for a given image: Compose builds every such service at once, and
+  # with Docker's containerd image store the second tag write fails with
+  # 'image "docker.io/openegiz/example-mine:local": already exists'. Compose
+  # builds all images before it creates any container, so the image exists by
+  # the time this service starts; `pull_policy: never` stops Compose from
+  # trying to pull a local-only image from Docker Hub first.
   mine-simulator:
-    build: ../../examples/mine
     image: openegiz/example-mine:local
+    pull_policy: never
     restart: unless-stopped
     mem_limit: 128m
     environment:

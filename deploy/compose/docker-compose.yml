@@ -308,12 +308,17 @@ services:
         condition: service_completed_successfully
       influxdb:
         condition: service_healthy
+    # The first start runs about 740 SQLite migrations before Grafana listens:
+    # about 10 s on an idle machine, 1.5-3 minutes on a busy one. Checks still
+    # run every 10 s during start_period and the first success marks Grafana
+    # healthy, so the long start_period only stops `make up` (`--wait`) from
+    # declaring a slow first start unhealthy; it never delays a fast one.
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 20s
+      start_period: 300s
 
   # Serves the Unity WebGL build straight from ./build in the repository, so
   # an uploaded build survives restarts (the Helm deployment uses emptyDir).
