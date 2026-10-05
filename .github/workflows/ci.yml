@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Helm lint and render
+        run: |
+          helm lint . -f secrets.values.yaml.example --set grafanaPlugin.publicHost=127.0.0.1
+          helm template opentwins . -n opentwins -f secrets.values.yaml.example \
+            --set grafanaPlugin.publicHost=127.0.0.1 > /dev/null
+      - name: Shell syntax and shellcheck
+        run: |
+          git ls-files '*.sh' | xargs -d '\n' -n1 bash -n
+          git ls-files 'scripts/*.sh' 'deploy/*.sh' | xargs -d '\n' shellcheck --severity=warning
+      - name: Python byte-compile
+        run: git ls-files '*.py' | xargs -d '\n' python3 -m py_compile
+      - name: Compose config is valid
+        run: |
+          bash scripts/compose-env.sh
+          docker compose -f deploy/compose/docker-compose.yml config -q
+
+  compose-e2e:
+    name: compose e2e (${{ matrix.runner }})
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: make up
+        run: make up
+      - name: make smoke
+        run: make smoke
+      - name: Memory actually used
+        if: always()
+        run: docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}'
+      - name: Logs on failure
+        if: failure()
+        run: |
+          docker compose -f deploy/compose/docker-compose.yml ps -a
+          docker compose -f deploy/compose/docker-compose.yml logs --no-color --tail=200

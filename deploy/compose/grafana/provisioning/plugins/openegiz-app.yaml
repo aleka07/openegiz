@@ -1,0 +1,17 @@
+# The OpenEgiz app is a frontend plugin: it calls Ditto and the extended API
+# from the user's browser, so these URLs must be reachable from the browser,
+# not from inside the compose network.
+apiVersion: 1
+apps:
+  - type: ertis-opentwins-app
+    org_id: 1
+    jsonData:
+      dittoURL: $OPENEGIZ_PUBLIC_DITTO_URL
+      extendedURL: $OPENEGIZ_PUBLIC_EXTENDED_API_URL
+      dittoUsername: ditto
+      dittoDevopsUsername: devops
+    secureJsonData:
+      dittoPassword: $DITTO_PASSWORD
+      dittoBasicAuth: $DITTO_BASIC_AUTH
+      dittoDevopsPassword: $DITTO_DEVOPS_PASSWORD
+      dittoDevopsBasicAuth: $DITTO_DEVOPS_BASIC_AUTH

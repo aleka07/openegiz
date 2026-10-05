@@ -1,5 +1,44 @@
-.PHONY: install uninstall status endpoints upgrade upload-build generate-data copy-build check-secrets check-public-host
+.PHONY: up down ps logs smoke clean install uninstall status endpoints upgrade upload-build generate-data copy-build check-secrets check-public-host
 
+# ---------------------------------------------------------------------------
+# Docker Compose deployment (laptops, CI, contest judges): deploy/compose/
+# ---------------------------------------------------------------------------
+COMPOSE := docker compose -f deploy/compose/docker-compose.yml
+
+## Start the whole platform with Docker Compose (first run: generates credentials)
+up:
+	@bash scripts/compose-env.sh
+	@bash scripts/compose-preflight.sh
+	$(COMPOSE) up -d --build --wait --wait-timeout 900
+	@test "$$($(COMPOSE) ps -a --format '{{.ExitCode}}' init)" = 0 || { \
+	  echo "ERROR: the init job (policy + Ditto connections) failed:"; $(COMPOSE) logs init; exit 1; }
+	@bash scripts/compose-wait-ready.sh
+	@bash scripts/compose-urls.sh
+
+## Stop the platform, keep data
+down:
+	$(COMPOSE) down
+
+## Show compose service status
+ps:
+	@$(COMPOSE) ps -a
+
+## Follow logs (one service: make logs S=gateway)
+logs:
+	$(COMPOSE) logs -f --tail=100 $(S)
+
+## End-to-end check of the running compose stack
+smoke:
+	@bash scripts/compose-smoke.sh
+
+## Stop the platform and DELETE all its data and credentials
+clean:
+	$(COMPOSE) down -v --remove-orphans
+	rm -f deploy/compose/.env
+
+# ---------------------------------------------------------------------------
+# Helm deployment (servers): the chart at the repository root
+# ---------------------------------------------------------------------------
 # Several values reference names derived from the release name (e.g. the
 # telegraf configmap), so the release MUST be called "opentwins" until those
 # references are made release-agnostic.
