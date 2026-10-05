@@ -90,7 +90,7 @@ check "InfluxDB datasource healthy" sh -c "curl -sf -u admin:$GRAFANA_ADMIN_PASS
 
 echo "Extended API and Unity"
 check "extended API answers" sh -c "curl -s -o /dev/null -w '%{http_code}' http://$HOST:$EXTENDED_API_PORT/ | grep -qE '^[2-4][0-9][0-9]$'"
-check "Unity build served" curl -sf -o /dev/null "http://$HOST:$UNITY_PORT/build/WebGL%20Build.loader.js"
+check "Unity file server serves build/" curl -sf -o /dev/null "http://$HOST:$UNITY_PORT/build/README.md"
 
 if "${COMPOSE[@]}" ps -a --format '{{.Service}}' 2>/dev/null | grep -qx mine-setup || \
    docker ps -a --format '{{.Names}}' | grep -q '^openegiz-mine-simulator-'; then
