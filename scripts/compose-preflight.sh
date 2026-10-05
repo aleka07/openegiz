@@ -28,13 +28,32 @@ if [ "$mem_gib" -lt 6 ]; then
   warn "Docker has ${mem_gib} GiB of memory; OpenEgiz needs about 6 GiB. Raise it in Docker Desktop -> Settings -> Resources."
 fi
 
+# True if something accepts connections on 127.0.0.1:$1. Gives up after ~2 s
+# and treats the port as free: with WSL mirrored networking a connect to an
+# unused port hangs until the TCP timeout instead of being refused. Plain bash
+# rather than `timeout`, which macOS does not ship.
+port_busy() {
+  (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null &
+  local pid=$!
+  for _ in $(seq 20); do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      wait "$pid"
+      return
+    fi
+    sleep 0.1
+  done
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+  return 1
+}
+
 # A port is a problem only if something other than this stack holds it.
 ours="$(docker compose -f "$ROOT/deploy/compose/docker-compose.yml" ps -q 2>/dev/null || true)"
 if [ -z "$ours" ]; then
   busy=()
   for var in GRAFANA_PORT DITTO_PORT EXTENDED_API_PORT UNITY_PORT INFLUXDB_PORT MQTT_PORT; do
     port="${!var}"
-    if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
+    if port_busy "$port"; then
       busy+=("$var=$port")
     fi
   done

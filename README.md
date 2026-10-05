@@ -19,7 +19,7 @@ Based on [OpenTwins](https://github.com/ertis-research/opentwins) by ERTIS Resea
 
 ## Quick start (Docker Compose)
 
-**You need:** Docker with Compose v2.20+ (Docker Desktop on macOS/Windows, Docker Engine on Linux), `git`, `make`, and **6 GB of memory for Docker** (the stack uses about 3.2 GB). amd64 and arm64 both work. On Windows, run the commands inside WSL2 (not verified yet).
+**You need:** Docker with Compose v2.20+ (Docker Desktop on macOS/Windows, Docker Engine on Linux), `git`, `make`, and **6 GB of memory for Docker** (the stack uses about 3.2 GB). amd64 and arm64 both work. On Ubuntu/Debian, `make` is not installed by default: `sudo apt install make`. On Windows, run everything inside WSL2 — first do the [Windows setup](#windows-wsl2).
 
 ```bash
 git clone https://github.com/aleka07/openegiz.git
@@ -47,7 +47,7 @@ Open Grafana → **Dashboards → OpenEgiz Examples → Example Mine**. The twin
 | Command | What it does |
 |---|---|
 | `make up` | Start the platform (first run: generate credentials into `deploy/compose/.env`) |
-| `make example-mine` | Start the platform plus the Example Mine |
+| `make example-mine` | Start the platform plus the Example Mine; from then on `make up` / `make down` include the mine too |
 | `make example-mine-stop` | Stop the mine simulator; twins and data stay |
 | `make smoke` | End-to-end check of the running stack |
 | `make ps` / `make logs S=<service>` | Service status / follow logs |
@@ -57,11 +57,37 @@ Open Grafana → **Dashboards → OpenEgiz Examples → Example Mine**. The twin
 
 Credentials are generated once per checkout and live in `deploy/compose/.env` (git-ignored). There are no default passwords. Ports are bound to `127.0.0.1` only.
 
+### Windows (WSL2)
+
+OpenEgiz runs inside a Linux distribution under WSL2, not in PowerShell. Tested on Windows 11 24H2 with Docker Desktop 28 and WSL 2.4.
+
+1. Install [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) with the WSL 2 backend and start it.
+2. In PowerShell, install Ubuntu 24.04 and make it the default WSL distribution:
+
+   ```powershell
+   wsl --update
+   wsl --install -d Ubuntu-24.04
+   wsl --set-default Ubuntu-24.04
+   ```
+
+   Name `Ubuntu-24.04` exactly: plain `Ubuntu` now installs 26.04, which did not start on WSL 2.4 in our test. On first start Ubuntu asks you to create a Linux user.
+
+   `--set-default` matters: Docker Desktop connects to the *default* WSL distribution, and out of the box that is its own internal `docker-desktop`. Instead you can enable Ubuntu-24.04 in Docker Desktop → Settings → Resources → WSL integration.
+3. Open **Ubuntu 24.04** from the Start menu, check that `docker version` works, and install `make`:
+
+   ```bash
+   sudo apt update && sudo apt install -y make
+   ```
+
+4. Follow the quick start above in that Ubuntu terminal. Clone into your Linux home directory (`cd ~` first), not under `/mnt/c`: files on the Windows side are much slower to reach from WSL.
+
 ### Troubleshooting
 
 | Symptom | Fix |
 |---|---|
 | `Docker is not running` | Start Docker Desktop, or `sudo systemctl start docker` on Linux |
+| `make: command not found` | `sudo apt install make` (Ubuntu/Debian) |
+| Windows: `docker: command not found` inside Ubuntu | Docker Desktop is not connected to this distribution: `wsl --set-default Ubuntu-24.04` in PowerShell, or Docker Desktop → Settings → Resources → WSL integration. See [Windows (WSL2)](#windows-wsl2) |
 | `Ports already in use: MQTT_PORT=1883` (or another) | Something else holds the port (often a local Mosquitto). Stop it, or change the port in `deploy/compose/.env` and run `make up` again |
 | `Docker has N GiB of memory` warning, containers restarting | Give Docker 6 GB: Docker Desktop → Settings → Resources |
 | `Docker Compose ... is too old` | Update Docker; the `docker-compose` v1 binary is not supported |
