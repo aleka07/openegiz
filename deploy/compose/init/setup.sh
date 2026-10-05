@@ -10,17 +10,17 @@ DITTO_AUTH="ditto:${DITTO_PASSWORD}"
 
 put() {
     # $1 auth, $2 url, $3 body file
-    # Every PUT here is idempotent, so a 5xx or no answer is retried, a bounded
-    # number of times: a ready Ditto can still time out on the first write to
-    # a new entity while its JVMs warm up on a busy host, and answers
-    # 503 "ask.error ... Please retry". A 4xx is a real error and fails at once.
+    # Every PUT here is idempotent, so a timeout, a 5xx or no answer is
+    # retried, a bounded number of times: a ready Ditto can still time out on
+    # a write while its JVMs warm up on a busy host, answering 503 "ask.error
+    # ... Please retry" or 408 "command.timeout". Other 4xx fail at once.
     attempt=1
     while :; do
         status=$(curl --silent --show-error --max-time 70 --output /tmp/response --write-out '%{http_code}' \
             -X PUT -u "$1" -H 'Content-Type: application/json' --data-binary "@$3" "$2") || true
         case "$status" in
             2??) echo "ok   $status PUT $2"; return 0 ;;
-            000|5??)
+            000|408|5??)
                 if [ "$attempt" -lt 10 ]; then
                     echo "retry $status PUT $2 (attempt $attempt of 10): $(cat /tmp/response 2>/dev/null)"
                     attempt=$((attempt + 1))
