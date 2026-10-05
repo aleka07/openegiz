@@ -15,6 +15,8 @@ It runs two ways, both complete:
 
 Based on [OpenTwins](https://github.com/ertis-research/opentwins) by ERTIS Research (University of Málaga). This fork adds the Compose deployment with an end-to-end smoke test, ARM64 support, vendored Grafana plugins (no runtime dependency on upstream releases), stability fixes, and the [Example Mine](examples/mine/).
 
+**If OpenEgiz is useful to you, please ⭐ star the repository** — it is how other people and companies find the project.
+
 ## Quick start (Docker Compose)
 
 **You need:** Docker with Compose v2.20+ (Docker Desktop on macOS/Windows, Docker Engine on Linux), `git`, `make`, and **6 GB of memory for Docker** (the stack uses about 3.2 GB). amd64 and arm64 both work. On Windows, run the commands inside WSL2 (not verified yet).
@@ -206,7 +208,11 @@ The step-by-step guides (in Russian, written for the lab host) are in [docs/guid
 | `vendor/grafana-plugins/` | Vendored and rebranded ERTIS Grafana plugins |
 | `rebuild/extended-api/` | Reproducible arm64 build of the Ditto extended API image |
 | `build/` | Unity WebGL build served to the Unity panel |
-| `docs/` | Guides, installation journal, ARM64 audit, working notes |
+| `docs/` | Helm guides (in Russian), installation journal, engineering notes — see [docs/README.md](docs/README.md). Not needed for the Compose quick start |
+
+## Contributing
+
+Bug reports and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
