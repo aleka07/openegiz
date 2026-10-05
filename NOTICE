@@ -1,0 +1,33 @@
+OpenEgiz
+https://github.com/aleka07/openegiz
+
+OpenEgiz's own code is licensed under the MIT License (see LICENSE).
+
+OpenEgiz is a fork of OpenTwins and redistributes parts of it. Those parts
+remain under the Apache License, Version 2.0 (see LICENSES/Apache-2.0.txt):
+
+  OpenTwins
+  Copyright ERTIS Research Group, University of Malaga, and OpenTwins contributors
+  https://github.com/ertis-research/opentwins
+
+  Derived files in this repository: the Helm chart glue (Chart.yaml,
+  values.yaml, templates/), post-install/, and the vendored Grafana plugins
+  in vendor/grafana-plugins/ (ertis-opentwins-app, ertis-unity-panel; their
+  plugin ids and ERTIS attribution are preserved, only display strings are
+  rebranded — see vendor/grafana-plugins/README.md). OpenEgiz has modified
+  these files; the git history records every change.
+
+Third-party Helm charts vendored under charts/ keep their own licenses:
+
+  Eclipse Ditto chart, Eclipse Hono chart  - Eclipse Public License 2.0
+  Grafana chart, Bitnami MongoDB chart     - Apache License 2.0
+  InfluxDB2 and Telegraf charts            - MIT License (InfluxData helm-charts)
+  Mosquitto chart                          - ERTIS Research Helm-charts
+
+The Ditto extended API (https://github.com/ertis-research/extended-api-for-eclipse-ditto)
+is NOT redistributed: its repository has no license file, so OpenEgiz only
+builds it locally from a pinned upstream commit and never publishes an image.
+
+Eclipse Ditto, Grafana, InfluxDB, Telegraf, Eclipse Mosquitto and MongoDB
+container images are pulled from their publishers at install time and are
+covered by their own licenses.
