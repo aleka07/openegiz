@@ -16,7 +16,9 @@ up:
 	@bash scripts/compose-env.sh
 	@bash scripts/compose-preflight.sh
 	$(COMPOSE) up -d --build --wait --wait-timeout 900
-	@test "$$($(COMPOSE) ps -a --format '{{.ExitCode}}' init)" = 0 || { \
+	@# `--wait` does not wait for one-shot jobs to finish: a running init counts
+	@# as up. Wait for it to exit, then check how.
+	@test "$$(docker wait $$($(COMPOSE) ps -a -q init))" = 0 || { \
 	  echo "ERROR: the init job (policy + Ditto connections) failed:"; $(COMPOSE) logs init; exit 1; }
 	@bash scripts/compose-wait-ready.sh
 	@bash scripts/compose-urls.sh
