@@ -1,0 +1,331 @@
+# OpenEgiz — Docker Compose deployment.
+#
+# Same components and wiring as the Helm chart at the repository root, sized
+# for a laptop: every Ditto service gets the 512m-768m limits used by Eclipse
+# Ditto's own docker deployment instead of the chart's 2 GiB.
+#
+# Start it with `make up` from the repository root: that generates .env with
+# random credentials on first run, then calls `docker compose up`.
+
+name: openegiz
+
+x-ditto-service: &ditto-service
+  restart: unless-stopped
+  networks:
+    default:
+      aliases:
+        - ditto-cluster
+  depends_on:
+    mongodb:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD-SHELL", "curl --fail --silent $$(hostname):8558/alive || exit 1"]
+    interval: 15s
+    timeout: 10s
+    retries: 8
+    start_period: 120s
+
+# Upstream Ditto docker settings, plus the header blocklist from the Helm
+# values: without it the HTTP Authorization header (the caller's Basic
+# credentials) is copied into every twin event published on anonymous MQTT.
+x-ditto-java-options: &ditto-java-options >-
+  -XX:ActiveProcessorCount=2 -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport
+  -XX:+UseStringDeduplication -Xss512k -XX:MaxRAMPercentage=50 -XX:+UseG1GC
+  -XX:MaxGCPauseMillis=150 -Dakka.coordinated-shutdown.exit-jvm=on
+  -Dakka.cluster.shutdown-after-unsuccessful-join-seed-nodes=180s
+  -Dakka.cluster.failure-detector.threshold=15.0
+  -Dakka.cluster.failure-detector.expected-response-after=10s
+  -Dakka.cluster.failure-detector.acceptable-heartbeat-pause=20s
+  -Dakka.cluster.downing-provider-class=
+  -Dditto.protocol.blocklist.0=raw-request-uri -Dditto.protocol.blocklist.1=cache-control
+  -Dditto.protocol.blocklist.2=connection -Dditto.protocol.blocklist.3=timeout-access
+  -Dditto.protocol.blocklist.4=accept-encoding -Dditto.protocol.blocklist.5=x-forwarded-scheme
+  -Dditto.protocol.blocklist.6=x-forwarded-port -Dditto.protocol.blocklist.7=x-forwarded-for
+  -Dditto.protocol.blocklist.8=forwarded=for -Dditto.protocol.blocklist.9=sec-fetch-mode
+  -Dditto.protocol.blocklist.10=sec-fetch-site -Dditto.protocol.blocklist.11=authorization
+  -Dditto.protocol.blocklist.12=accept-language -Dditto.protocol.blocklist.13=host
+  -Dditto.protocol.blocklist.14=via -Dditto.protocol.blocklist.15=sec-ch-ua
+  -Dditto.protocol.blocklist.16=sec-ch-ua-mobile -Dditto.protocol.blocklist.17=sec-ch-ua-platform
+  -Dditto.protocol.blocklist.18=sec-fetch-dest -Dditto.protocol.blocklist.19=user-agent
+
+services:
+  # ---------------------------------------------------------------- storage
+  mongodb:
+    image: docker.io/library/mongo:6.0
+    restart: unless-stopped
+    command: ["mongod", "--bind_ip_all", "--storageEngine", "wiredTiger"]
+    mem_limit: 512m
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  influxdb:
+    image: docker.io/library/influxdb:2.7.4-alpine
+    restart: unless-stopped
+    mem_limit: 512m
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: admin
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_ADMIN_PASSWORD:?run make up to generate .env}
+      DOCKER_INFLUXDB_INIT_ORG: opentwins
+      DOCKER_INFLUXDB_INIT_BUCKET: default
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_TOKEN:?run make up to generate .env}
+    ports:
+      - "${OPENEGIZ_BIND:-127.0.0.1}:${INFLUXDB_PORT:-8086}:8086"
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+      - influxdb-config:/etc/influxdb2
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # ------------------------------------------------------------- messaging
+  mosquitto:
+    image: docker.io/library/eclipse-mosquitto:2.0.18
+    restart: unless-stopped
+    mem_limit: 64m
+    ports:
+      - "${OPENEGIZ_BIND:-127.0.0.1}:${MQTT_PORT:-1883}:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -t '$$SYS/broker/version' -C 1 -W 5 >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 6
+
+  telegraf:
+    image: docker.io/library/telegraf:1.37-alpine
+    restart: unless-stopped
+    # Run as the telegraf user: as root the image's entrypoint runs setcap on
+    # the 270 MB binary, overlayfs copies the whole file up, and those dirty
+    # pages count against the memory limit (OOM-kill before start). Nothing
+    # here needs the raw-socket/low-port capabilities setcap would grant.
+    user: telegraf
+    mem_limit: 256m
+    environment:
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
+    volumes:
+      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    depends_on:
+      influxdb:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+
+  # ----------------------------------------------------------- Eclipse Ditto
+  policies:
+    <<: *ditto-service
+    image: docker.io/eclipse/ditto-policies:${DITTO_VERSION:-3.3.7}
+    mem_limit: 512m
+    environment:
+      TZ: UTC
+      BIND_HOSTNAME: 0.0.0.0
+      MONGO_DB_HOSTNAME: mongodb
+      JAVA_TOOL_OPTIONS: *ditto-java-options
+
+  things:
+    <<: *ditto-service
+    image: docker.io/eclipse/ditto-things:${DITTO_VERSION:-3.3.7}
+    mem_limit: 512m
+    environment:
+      TZ: UTC
+      BIND_HOSTNAME: 0.0.0.0
+      MONGO_DB_HOSTNAME: mongodb
+      JAVA_TOOL_OPTIONS: *ditto-java-options
+
+  things-search:
+    <<: *ditto-service
+    image: docker.io/eclipse/ditto-things-search:${DITTO_VERSION:-3.3.7}
+    mem_limit: 512m
+    environment:
+      TZ: UTC
+      BIND_HOSTNAME: 0.0.0.0
+      MONGO_DB_HOSTNAME: mongodb
+      JAVA_TOOL_OPTIONS: *ditto-java-options
+
+  connectivity:
+    <<: *ditto-service
+    image: docker.io/eclipse/ditto-connectivity:${DITTO_VERSION:-3.3.7}
+    mem_limit: 768m
+    environment:
+      TZ: UTC
+      BIND_HOSTNAME: 0.0.0.0
+      MONGO_DB_HOSTNAME: mongodb
+      JAVA_TOOL_OPTIONS: *ditto-java-options
+
+  gateway:
+    <<: *ditto-service
+    image: docker.io/eclipse/ditto-gateway:${DITTO_VERSION:-3.3.7}
+    mem_limit: 512m
+    environment:
+      TZ: UTC
+      BIND_HOSTNAME: 0.0.0.0
+      ENABLE_PRE_AUTHENTICATION: "true"
+      DEVOPS_SECURED: "true"
+      DEVOPS_AUTHENTICATION_METHOD: basic
+      DEVOPS_PASSWORD: ${DITTO_DEVOPS_PASSWORD:?run make up to generate .env}
+      DEVOPS_STATUS_SECURED: "true"
+      STATUS_AUTHENTICATION_METHOD: basic
+      STATUS_PASSWORD: ${DITTO_DEVOPS_PASSWORD}
+      JAVA_TOOL_OPTIONS: *ditto-java-options
+
+  ditto-nginx:
+    image: docker.io/library/nginx:1.25-alpine
+    restart: unless-stopped
+    mem_limit: 64m
+    environment:
+      DITTO_PASSWORD: ${DITTO_PASSWORD:?run make up to generate .env}
+      DITTO_DEVOPS_PASSWORD: ${DITTO_DEVOPS_PASSWORD}
+    ports:
+      - "${OPENEGIZ_BIND:-127.0.0.1}:${DITTO_PORT:-8080}:80"
+    volumes:
+      - ./ditto/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ditto/nginx-cors.conf:/etc/nginx/nginx-cors.conf:ro
+      - ./ditto/40-htpasswd.sh:/docker-entrypoint.d/40-htpasswd.sh:ro
+      - ./ditto/index.html:/etc/nginx/html/index.html:ro
+      - ./ditto/ditto-up.svg:/etc/nginx/html/ditto-up.svg:ro
+      - ./ditto/ditto-down.svg:/etc/nginx/html/ditto-down.svg:ro
+    depends_on:
+      gateway:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # Policy + Ditto<->Mosquitto connections (the chart's post-install jobs).
+  init:
+    image: docker.io/curlimages/curl:8.10.1
+    restart: "no"
+    entrypoint: ["/bin/sh", "/init/setup.sh"]
+    environment:
+      DITTO_PASSWORD: ${DITTO_PASSWORD}
+      DITTO_DEVOPS_PASSWORD: ${DITTO_DEVOPS_PASSWORD}
+    volumes:
+      - ./init:/init:ro
+    depends_on:
+      ditto-nginx:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+
+  # ------------------------------------------------- OpenTwins extended API
+  # Upstream sources carry no license file, so OpenEgiz never publishes an
+  # image of it: every install builds it locally from the pinned commit
+  # (same commit and Dockerfile as rebuild/extended-api/).
+  extended-api:
+    build:
+      context: https://github.com/ertis-research/extended-api-for-eclipse-ditto.git#b49663dea326854a2323423eaeab7e7f54d325a7
+      dockerfile_inline: |
+        FROM node:20-slim
+        WORKDIR /usr/src/app
+        COPY package*.json yarn.lock ./
+        RUN yarn install --frozen-lockfile
+        COPY . .
+        EXPOSE 8080
+        CMD ["yarn", "start"]
+    image: openegiz/ditto-extended-api:local-b49663d
+    restart: unless-stopped
+    mem_limit: 512m
+    environment:
+      HOST: localhost
+      PORT: "8080"
+      MONGO_URI_POLICIES: mongodb://mongodb:27017/ditto
+      DITTO_URI_THINGS: http://ditto-nginx:80
+      DITTO_USERNAME_API: ditto
+      DITTO_PASSWORD_API: ${DITTO_PASSWORD}
+      DITTO_USERNAME_DEVOPS: devops
+      DITTO_PASSWORD_DEVOPS: ${DITTO_DEVOPS_PASSWORD}
+      ALL_LOGS: "false"
+    ports:
+      - "${OPENEGIZ_BIND:-127.0.0.1}:${EXTENDED_API_PORT:-8085}:8080"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      ditto-nginx:
+        condition: service_started
+
+  # ------------------------------------------------------------ dashboards
+  grafana-plugins:
+    image: docker.io/library/busybox:1.36
+    restart: "no"
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        for p in ertis-opentwins-app ertis-unity-panel; do
+          rm -rf "/plugins/$$p"
+          unzip -q -o "/vendor/$$p.zip" -d /plugins
+        done
+        echo "Grafana plugins unpacked"
+    volumes:
+      - ../../vendor/grafana-plugins:/vendor:ro
+      - grafana-plugins:/plugins
+
+  grafana:
+    image: docker.io/grafana/grafana:12.3.0
+    restart: unless-stopped
+    mem_limit: 512m
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?run make up to generate .env}
+      # The image sets GF_PATHS_PLUGINS itself, and env beats grafana.ini.
+      GF_PATHS_PLUGINS: /var/lib/grafana-plugins
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
+      DITTO_PASSWORD: ${DITTO_PASSWORD}
+      DITTO_DEVOPS_PASSWORD: ${DITTO_DEVOPS_PASSWORD}
+      DITTO_BASIC_AUTH: ${DITTO_BASIC_AUTH}
+      DITTO_DEVOPS_BASIC_AUTH: ${DITTO_DEVOPS_BASIC_AUTH}
+      OPENEGIZ_PUBLIC_DITTO_URL: http://${OPENEGIZ_PUBLIC_HOST:-localhost}:${DITTO_PORT:-8080}
+      OPENEGIZ_PUBLIC_EXTENDED_API_URL: http://${OPENEGIZ_PUBLIC_HOST:-localhost}:${EXTENDED_API_PORT:-8085}
+    ports:
+      - "${OPENEGIZ_BIND:-127.0.0.1}:${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - grafana-plugins:/var/lib/grafana-plugins
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      grafana-plugins:
+        condition: service_completed_successfully
+      influxdb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # Serves the Unity WebGL build straight from ./build in the repository, so
+  # an uploaded build survives restarts (the Helm deployment uses emptyDir).
+  unity:
+    image: docker.io/library/nginx:1.25-alpine
+    restart: unless-stopped
+    mem_limit: 64m
+    ports:
+      - "${OPENEGIZ_BIND:-127.0.0.1}:${UNITY_PORT:-8090}:80"
+    volumes:
+      - ./unity/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../../build:/usr/share/nginx/html/build:ro
+
+volumes:
+  mongodb-data:
+  influxdb-data:
+  influxdb-config:
+  mosquitto-data:
+  grafana-data:
+  grafana-plugins:
