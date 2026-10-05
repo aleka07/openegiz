@@ -99,7 +99,7 @@ watch -n 2 'kubectl get nodes; kubectl get pods -A'
 ```text
 $ kubectl get nodes -o wide
 NAME        STATUS   ROLES           VERSION        INTERNAL-IP     CONTAINER-RUNTIME
-gx10-7897   Ready    control-plane   v1.36.3+k3s1   192.168.0.135   containerd://2.3.2-k3s2
+gx10-7897   Ready    control-plane   v1.36.3+k3s1   <host-ip>   containerd://2.3.2-k3s2
 
 $ kubectl get pods -A
 kube-system   coredns-...                     1/1   Running

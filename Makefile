@@ -1,4 +1,4 @@
-.PHONY: up down ps logs smoke clean example-mine example-mine-stop install uninstall status endpoints upgrade upload-build generate-data copy-build check-secrets
+.PHONY: up down ps logs smoke clean example-mine example-mine-stop install uninstall status endpoints upgrade upload-build generate-data copy-build check-secrets check-public-host
 
 # ---------------------------------------------------------------------------
 # Docker Compose deployment (laptops, CI, contest judges): deploy/compose/
@@ -61,21 +61,33 @@ CHART_PATH   := .
 # deploying the placeholders would break Ditto auth and telemetry ingest.
 SECRETS_FILE ?= $(HOME)/openegiz-deploy/secrets.values.yaml
 
+# Address browsers use to reach this host; the Grafana app plugin calls Ditto
+# and the extended API from the browser. Defaults to the first node's
+# InternalIP; override with `make install PUBLIC_HOST=my-host.example`.
+PUBLIC_HOST ?= $(shell kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null)
+
+check-public-host:
+	@test -n "$(PUBLIC_HOST)" || { \
+	  echo "ERROR: could not determine PUBLIC_HOST from kubectl."; \
+	  echo "       Pass it explicitly: make install PUBLIC_HOST=<ip-or-hostname>"; \
+	  exit 1; }
+
 check-secrets:
 	@test -f "$(SECRETS_FILE)" || { \
 	  echo "ERROR: secrets override not found: $(SECRETS_FILE)"; \
 	  echo "       It holds the Ditto/Grafana/InfluxDB credentials that are"; \
-	  echo "       intentionally absent from values.yaml. See ~/course/CREDENTIALS.md"; \
-	  echo "       on the host, or override with: make upgrade SECRETS_FILE=/path/to/file"; \
+	  echo "       intentionally absent from values.yaml. Create it from"; \
+	  echo "       secrets.values.yaml.example, or point to another file with:"; \
+	  echo "       make install SECRETS_FILE=/path/to/file"; \
 	  exit 1; }
 
 ## Install the OpenEgiz Helm chart
-install: check-secrets
-	helm install $(RELEASE_NAME) $(CHART_PATH) -n $(NAMESPACE) --create-namespace -f "$(SECRETS_FILE)" --wait --timeout=15m --debug
+install: check-secrets check-public-host
+	helm install $(RELEASE_NAME) $(CHART_PATH) -n $(NAMESPACE) --create-namespace -f "$(SECRETS_FILE)" --set grafanaPlugin.publicHost=$(PUBLIC_HOST) --wait --timeout=15m --debug
 
 ## Upgrade the OpenEgiz Helm chart
-upgrade: check-secrets
-	helm upgrade $(RELEASE_NAME) $(CHART_PATH) -n $(NAMESPACE) -f "$(SECRETS_FILE)" --wait --timeout=15m --debug
+upgrade: check-secrets check-public-host
+	helm upgrade $(RELEASE_NAME) $(CHART_PATH) -n $(NAMESPACE) -f "$(SECRETS_FILE)" --set grafanaPlugin.publicHost=$(PUBLIC_HOST) --wait --timeout=15m --debug
 
 ## Uninstall the OpenEgiz Helm chart
 uninstall:

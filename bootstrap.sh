@@ -339,9 +339,8 @@ step "Step 4/5 — deploy the chart"
 
 # The Grafana app plugin is a FRONTEND plugin: it calls Ditto and the extended
 # API from the USER'S BROWSER, so those URLs must be the host's LAN IP, not a
-# cluster-internal DNS name. values.yaml hardcodes gx10-11's 192.168.0.135,
-# which is wrong on any other machine — so we override it from the node's
-# actual InternalIP.
+# cluster-internal DNS name. grafanaPlugin.publicHost is therefore set from
+# the node's actual InternalIP.
 NODE_IP="$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || true)"
 [ -n "$NODE_IP" ] || die "could not read the node InternalIP." \
                          "Check: kubectl get nodes -o wide"
@@ -351,7 +350,7 @@ ok "node IP for the Grafana plugin URLs: $NODE_IP"
 # and no external repo is contacted (guide 02, step 2).
 info "rendering the chart as a dry check ..."
 helm template "$RELEASE_NAME" "$CHART_DIR" -n "$NAMESPACE" \
-  -f "$SECRETS_FILE" >/dev/null \
+  -f "$SECRETS_FILE" --set "grafanaPlugin.publicHost=$NODE_IP" >/dev/null \
   || die "the chart does not render — refusing to install." \
          "See docs/guides/02 – Установка платформы на ARM64.md, Шаг 2"
 ok "chart renders cleanly"
@@ -363,8 +362,7 @@ info "helm upgrade --install (timeout $HELM_TIMEOUT) ..."
 if ! helm upgrade --install "$RELEASE_NAME" "$CHART_DIR" \
       -n "$NAMESPACE" --create-namespace \
       -f "$SECRETS_FILE" \
-      --set "grafanaPlugin.dittoURL=http://$NODE_IP:30525" \
-      --set "grafanaPlugin.extendedURL=http://$NODE_IP:30528" \
+      --set "grafanaPlugin.publicHost=$NODE_IP" \
       --wait --timeout="$HELM_TIMEOUT"; then
   printf '\n%s--- diagnostics ---%s\n' "$C_YELLOW" "$C_RESET" >&2
   kubectl get pods -n "$NAMESPACE" -o wide >&2 || true
