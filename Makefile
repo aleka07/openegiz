@@ -1,4 +1,4 @@
-.PHONY: up down ps logs smoke clean example-mine example-mine-stop install uninstall status endpoints upgrade upload-build generate-data copy-build check-secrets check-public-host
+.PHONY: up down ps logs smoke clean example-mine example-mine-stop install uninstall status endpoints upgrade upload-build generate-data copy-build unity-demo check-secrets check-public-host
 
 # ---------------------------------------------------------------------------
 # Docker Compose deployment (laptops, CI, contest judges): deploy/compose/
@@ -116,6 +116,10 @@ upload-build:
 ## Compose by default; Helm: make generate-data MQTT_PORT=30511 DITTO_URL=http://localhost:30525 DITTO_PASSWORD=...
 generate-data:
 	@bash scripts/demo-oven.sh
+
+## Download the demo Unity WebGL scene (88 MB, kept out of git) into ./build/
+unity-demo:
+	@bash scripts/unity-demo.sh
 
 ## Copy 4 Unity WebGL build files from SRC into ./build/
 ## Usage: make copy-build SRC=/path/to/source

@@ -119,6 +119,8 @@ Ditto updates the twin and republishes the change; Telegraf writes it to InfluxD
 
 3D is optional. The vendored **Unity** Grafana panel runs a Unity WebGL build inside a dashboard, sends it twin data and can send events back. This is what a build has to do.
 
+The repository ships no scene, so clones stay small: `make unity-demo` downloads a demo build (88 MB) into `build/` to try the panel.
+
 **Build.** Target WebGL with *Player Settings → Publishing Settings → Compression Format* = **Disabled**. The panel loads exactly four files: `*.loader.js`, `*.framework.js`, `*.data`, `*.wasm` — `.gz`, `.br` and `.unityweb` builds will not load (the server sends no `Content-Encoding`). Avoid spaces in the build name, or write them as `%20` in URLs. Set `WebGLInput.captureAllKeyboardInput = false;` in an always-active script, otherwise the build swallows the dashboard's keyboard input.
 
 **Serve it.**
@@ -216,6 +218,7 @@ Day-to-day operation goes through the Makefile:
 | `make status` | Pod status (~1–2 min to converge on a fast host) |
 | `make endpoints` | Service URLs (Grafana, Ditto, InfluxDB, MQTT) |
 | `make upload-build` / `make copy-build SRC=…` | Unity WebGL build to the nginx pod / into `build/` |
+| `make unity-demo` | Download the demo Unity scene into `build/` |
 | `make generate-data MQTT_PORT=30511 DITTO_URL=http://localhost:30525 DITTO_PASSWORD=…` | Oven demo against the Helm NodePorts |
 
 Usernames are fixed — Grafana `admin`, Ditto `ditto` and `devops`, InfluxDB `admin` (org `opentwins`, bucket `default`). There are **no default passwords**: you generate them before the first install. MongoDB is `ClusterIP` and not exposed; Mosquitto and the extended API have no authentication, so the Helm stand is LAN-only.
@@ -233,7 +236,7 @@ The step-by-step guides (in Russian, written for the lab host) are in [docs/guid
 | `post-install/` | Helm post-install jobs: default policy, Ditto connections, Raspberry Pi example |
 | `vendor/grafana-plugins/` | Vendored and rebranded ERTIS Grafana plugins |
 | `rebuild/extended-api/` | Reproducible arm64 build of the Ditto extended API image |
-| `build/` | Unity WebGL build served to the Unity panel |
+| `build/` | Unity WebGL build served to the Unity panel (empty; `make unity-demo` for the demo scene) |
 | `docs/` | Helm guides (in Russian), installation journal, engineering notes — see [docs/README.md](docs/README.md). Not needed for the Compose quick start |
 
 ## Contributing

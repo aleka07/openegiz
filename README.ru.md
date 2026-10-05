@@ -119,6 +119,8 @@ Ditto обновляет двойник и публикует изменение
 
 3D необязательно. Вендоренная панель Grafana **Unity** запускает WebGL-сборку Unity прямо в дашборде, передаёт ей данные двойников и умеет получать события обратно. Вот что должна уметь сборка.
 
+Сцены в репозитории нет, чтобы клон был лёгким: `make unity-demo` скачивает демо-сборку (88 МБ) в `build/`, чтобы попробовать панель.
+
 **Сборка.** Платформа WebGL, *Player Settings → Publishing Settings → Compression Format* = **Disabled**. Панель загружает ровно четыре файла: `*.loader.js`, `*.framework.js`, `*.data`, `*.wasm` — сборки `.gz`, `.br` и `.unityweb` не загрузятся (сервер не отдаёт `Content-Encoding`). Не используйте пробелы в имени сборки или пишите их в URL как `%20`. В скрипте, который всегда активен, поставьте `WebGLInput.captureAllKeyboardInput = false;` — иначе сборка перехватит клавиатуру у всего дашборда.
 
 **Где разместить.**
@@ -216,6 +218,7 @@ bash bootstrap.sh
 | `make status` | Статус подов (~1–2 мин до готовности на быстром хосте) |
 | `make endpoints` | Адреса сервисов (Grafana, Ditto, InfluxDB, MQTT) |
 | `make upload-build` / `make copy-build SRC=…` | Сборка Unity WebGL в под nginx / в `build/` |
+| `make unity-demo` | Скачать демо-сцену Unity в `build/` |
 | `make generate-data MQTT_PORT=30511 DITTO_URL=http://localhost:30525 DITTO_PASSWORD=…` | Демо с печами на NodePort-ах Helm |
 
 Логины фиксированы — Grafana `admin`, Ditto `ditto` и `devops`, InfluxDB `admin` (org `opentwins`, bucket `default`). **Паролей по умолчанию нет**: вы генерируете их до первой установки. MongoDB — `ClusterIP`, наружу не видна; у Mosquitto и extended API нет аутентификации, поэтому Helm-стенд — только для LAN.
@@ -233,7 +236,7 @@ bash bootstrap.sh
 | `post-install/` | Post-install jobs Helm: политика по умолчанию, подключения Ditto, пример с Raspberry Pi |
 | `vendor/grafana-plugins/` | Вендоренные и ребрендированные Grafana-плагины ERTIS |
 | `rebuild/extended-api/` | Воспроизводимая arm64-сборка образа Ditto extended API |
-| `build/` | Сборка Unity WebGL для панели Unity |
+| `build/` | Сборка Unity WebGL для панели Unity (пусто; `make unity-demo` — демо-сцена) |
 | `docs/` | Гайды по Helm, журнал установки, инженерные заметки — см. [docs/README.md](docs/README.md). Для быстрого старта на Compose не нужны |
 
 ## Как помочь проекту

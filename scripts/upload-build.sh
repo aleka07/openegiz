@@ -17,6 +17,7 @@ echo ""
 for f in ./build/*; do
     [ -f "$f" ] || continue
     name=$(basename "$f")
+    [ "$name" = README.md ] && continue
     echo "  Uploading: $name"
     kubectl cp -n "${NAMESPACE:-opentwins}" "$f" "$POD:/usr/share/nginx/html/build/$name"
 done
@@ -26,5 +27,6 @@ echo "Access links:"
 for f in ./build/*; do
     [ -f "$f" ] || continue
     name=$(basename "$f")
+    [ "$name" = README.md ] && continue
     echo "  http://${NODE_IP}:30530/build/${name}"
 done
