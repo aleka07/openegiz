@@ -87,6 +87,11 @@ check "API healthy" curl -sf "$GRAFANA/api/health"
 check "OpenEgiz app plugin enabled" sh -c "curl -sf -u admin:$GRAFANA_ADMIN_PASSWORD $GRAFANA/api/plugins/ertis-opentwins-app/settings | grep -q '\"enabled\":true'"
 check "Unity panel plugin loaded" curl -sf -u "admin:$GRAFANA_ADMIN_PASSWORD" "$GRAFANA/api/plugins/ertis-unity-panel/settings"
 check "InfluxDB datasource healthy" sh -c "curl -sf -u admin:$GRAFANA_ADMIN_PASSWORD $GRAFANA/api/datasources/uid/opentwins-influxdb/health | grep -q '\"OK\"'"
+# The OpenEgiz app reaches Ditto and the extended API only through Grafana's
+# plugin proxy, from inside the Grafana container.
+PROXY="$GRAFANA/api/plugin-proxy/ertis-opentwins-app"
+check "OpenEgiz app reaches Ditto (plugin proxy)" curl -sf -u "admin:$GRAFANA_ADMIN_PASSWORD" "$PROXY/ditto/api/2/search/things?option=size(1)"
+check "OpenEgiz app reaches the extended API (plugin proxy)" sh -c "curl -s -o /dev/null -w '%{http_code}' -u admin:$GRAFANA_ADMIN_PASSWORD $PROXY/extended/ | grep -qE '^[2-4][0-9][0-9]$'"
 
 echo "Extended API and Unity"
 check "extended API answers" sh -c "curl -s -o /dev/null -w '%{http_code}' http://$HOST:$EXTENDED_API_PORT/ | grep -qE '^[2-4][0-9][0-9]$'"
@@ -106,6 +111,8 @@ if "${COMPOSE[@]}" ps -a --format '{{.Service}}' 2>/dev/null | grep -qx mine-set
     sleep 2
   done
   if [ $ok = 1 ]; then pass "simulator telemetry reaches InfluxDB"; else fail "no Example Mine telemetry in InfluxDB for the last 2 minutes"; fi
+  # Same query the app's Twins page sends.
+  check "Twins UI lists the Example Mine twins" sh -c "curl -sf -u admin:$GRAFANA_ADMIN_PASSWORD '$PROXY/ditto/api/2/search/things?filter=ne(attributes/_isType,true)&fields=thingId&option=size(200)' | grep -q 'org.openegiz.mine:truck-01'"
   check "dashboard provisioned" curl -sf -u "admin:$GRAFANA_ADMIN_PASSWORD" "$GRAFANA/api/dashboards/uid/openegiz-example-mine"
 fi
 
