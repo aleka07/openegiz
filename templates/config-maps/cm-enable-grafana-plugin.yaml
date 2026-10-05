@@ -1,4 +1,10 @@
 {{- if and .Values.grafana.enabled }}
+{{- /* The app plugin runs in the browser, so it needs host-reachable URLs. */}}
+{{- $gp := .Values.grafanaPlugin | default dict }}
+{{- $host := $gp.publicHost }}
+{{- $missing := "grafanaPlugin.publicHost is not set: give the IP or hostname browsers use to reach this host (make install does this from the node InternalIP)" }}
+{{- $dittoURL := $gp.dittoURL | default (printf "http://%s:%v" (required $missing $host) .Values.ditto.nginx.service.nodePort) }}
+{{- $extendedURL := $gp.extendedURL | default (printf "http://%s:%v" (required $missing $host) .Values.extendedAPI.service.nodePort) }}
 
 apiVersion: v1
 kind: ConfigMap
@@ -17,8 +23,8 @@ data:
       - type: ertis-opentwins-app
         org_id: 1
         jsonData:
-          dittoURL: {{ (.Values.grafanaPlugin).dittoURL | default (printf "http://%s-ditto-nginx:%v" .Release.Name .Values.ditto.nginx.service.port) }}
-          extendedURL: {{ (.Values.grafanaPlugin).extendedURL | default (printf "http://%s-ditto-extended-api:%v" .Release.Name .Values.extendedAPI.service.port) }}
+          dittoURL: {{ $dittoURL }}
+          extendedURL: {{ $extendedURL }}
           dittoUsername: {{ .Values.ditto.global.basicAuthUsers.ditto.user }}
           dittoDevopsUsername: {{ .Values.ditto.global.basicAuthUsers.devops.user }}
         secureJsonData:

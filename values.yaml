@@ -379,9 +379,15 @@ influxdb2:
 # the cluster cannot resolve — the Twins page then silently shows "No twins
 # found". These URLs must be reachable from wherever users open Grafana
 # (NodePorts on the host IP for this single-node LAN setup).
+#
+# Set publicHost to the IP or hostname browsers use to reach this host; the
+# URLs are then built from the Ditto nginx and extended-API NodePorts.
+# `make install` and bootstrap.sh fill it in from the node's InternalIP.
+# dittoURL / extendedURL override the derived URLs (e.g. behind a proxy).
 grafanaPlugin:
-  dittoURL: http://192.168.0.135:30525
-  extendedURL: http://192.168.0.135:30528
+  publicHost: ""
+  dittoURL: ""
+  extendedURL: ""
 
 grafana:
   enabled: true # Value added by OpenTwins to indicate if this component should be installed or not

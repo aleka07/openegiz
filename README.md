@@ -139,4 +139,4 @@ Data flows MQTT → Ditto (twin state) → MQTT → Telegraf → InfluxDB → Gr
 
 ## License
 
-MIT (see [LICENSE](LICENSE)). Built on [OpenTwins](https://github.com/ertis-research/opentwins) and its Grafana plugins by ERTIS Research; Eclipse Ditto, Grafana, InfluxDB, Telegraf, Mosquitto and MongoDB are their respective projects under their own licenses.
+OpenEgiz's own code is [MIT](LICENSE). OpenEgiz is a fork of [OpenTwins](https://github.com/ertis-research/opentwins) by ERTIS Research (University of Málaga): the parts derived from it, including the vendored ERTIS Grafana plugins, remain under the [Apache License 2.0](LICENSES/Apache-2.0.txt). [NOTICE](NOTICE) lists what comes from where. Eclipse Ditto, Grafana, InfluxDB, Telegraf, Mosquitto and MongoDB are their respective projects under their own licenses.
