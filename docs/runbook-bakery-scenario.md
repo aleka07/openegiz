@@ -42,11 +42,11 @@ ssh vpn-gx10-11 'sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml kubectl get pods -n o
 
 | Что | Адрес |
 |---|---|
-| Grafana | http://192.168.0.135:30718 |
-| Ditto API | http://192.168.0.135:30525 |
-| Ditto extended API (его зовёт плагин из браузера) | http://192.168.0.135:30528 |
-| InfluxDB UI | http://192.168.0.135:30716 |
-| MQTT | `192.168.0.135:30511` |
+| Grafana | http://<host-ip>:30718 |
+| Ditto API | http://<host-ip>:30525 |
+| Ditto extended API (его зовёт плагин из браузера) | http://<host-ip>:30528 |
+| InfluxDB UI | http://<host-ip>:30716 |
+| MQTT | `<host-ip>:30511` |
 
 ---
 
