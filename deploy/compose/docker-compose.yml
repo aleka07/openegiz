@@ -18,30 +18,31 @@ x-ditto-service: &ditto-service
   depends_on:
     mongodb:
       condition: service_healthy
-  # /ready, as in Ditto's Helm chart, not /alive: ready means this node is an
-  # Up member of the cluster and its shard regions are registered, so it can
-  # serve requests. init waits for it. Checks run every 15 s from the start and
-  # the first success counts; the long start_period only matters on a busy
-  # host, where forming the cluster can take minutes.
+  # Liveness, not readiness: readiness drops whenever the cluster is briefly
+  # unsettled on a busy host, and Compose fails `--wait` and `depends_on` at
+  # once on "unhealthy". init waits for readiness itself (init/setup.sh).
   healthcheck:
-    test: ["CMD-SHELL", "curl --fail --silent $$(hostname):8558/ready || exit 1"]
+    test: ["CMD-SHELL", "curl --fail --silent $$(hostname):8558/alive || exit 1"]
     interval: 15s
     timeout: 10s
     retries: 8
-    start_period: 300s
+    start_period: 120s
 
 # Upstream Ditto docker settings, plus the header blocklist from the Helm
 # values: without it the HTTP Authorization header (the caller's Basic
 # credentials) is copied into every twin event published on anonymous MQTT.
 #
-# One change from upstream docker: the split brain resolver stays on (Ditto's
-# default, keep-majority) and is enabled at once instead of after Ditto's 1 h
-# delay. When the host stalls (seen: every JVM frozen for 16 s on a busy VM
-# host), Akka can quarantine a cluster connection. A quarantined node stays
-# marked TERMINATED until something downs it; with no downing provider the
-# cluster never heals (things/search roles "not available" for good). The
-# resolver downs it, the node exits (exit-jvm=on), Docker restarts it and it
-# joins again.
+# Changes from upstream docker, for busy hosts (seen on an 8 vCPU VM: every
+# JVM frozen for 16 s at once):
+# - The split brain resolver stays on (Ditto's default, keep-majority) and is
+#   enabled at once instead of after Ditto's 1 h delay. After such a stall
+#   Akka can quarantine a cluster connection; the quarantined node stays
+#   TERMINATED until something downs it, and with no downing provider the
+#   cluster never heals ("Role is not available" for good). The resolver
+#   downs it, the node exits (exit-jvm=on), Docker restarts it, it rejoins.
+# - So that a stall alone does not down anyone: a node counts as unreachable
+#   only after 60 s without heartbeats (upstream 20 s), and the resolver does
+#   not down everything when reachability keeps changing.
 x-ditto-java-options: &ditto-java-options >-
   -XX:ActiveProcessorCount=2 -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport
   -XX:+UseStringDeduplication -Xss512k -XX:MaxRAMPercentage=50 -XX:+UseG1GC
@@ -49,8 +50,9 @@ x-ditto-java-options: &ditto-java-options >-
   -Dakka.cluster.shutdown-after-unsuccessful-join-seed-nodes=180s
   -Dakka.cluster.failure-detector.threshold=15.0
   -Dakka.cluster.failure-detector.expected-response-after=10s
-  -Dakka.cluster.failure-detector.acceptable-heartbeat-pause=20s
+  -Dakka.cluster.failure-detector.acceptable-heartbeat-pause=60s
   -Dditto.cluster.sbr.auto-enable-after=0s
+  -Dakka.cluster.split-brain-resolver.down-all-when-unstable=off
   -Dditto.protocol.blocklist.0=raw-request-uri -Dditto.protocol.blocklist.1=cache-control
   -Dditto.protocol.blocklist.2=connection -Dditto.protocol.blocklist.3=timeout-access
   -Dditto.protocol.blocklist.4=accept-encoding -Dditto.protocol.blocklist.5=x-forwarded-scheme
@@ -71,10 +73,13 @@ services:
     mem_limit: 512m
     volumes:
       - mongodb-data:/data/db
+    # mongosh is a Node.js program: on a busy 8 vCPU VM it alone took over
+    # 5 s to start, and 12 such timeouts in a row marked a working MongoDB
+    # unhealthy, which fails `make up`.
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
       interval: 10s
-      timeout: 5s
+      timeout: 30s
       retries: 12
       start_period: 20s
 
@@ -230,20 +235,7 @@ services:
       DITTO_DEVOPS_PASSWORD: ${DITTO_DEVOPS_PASSWORD}
     volumes:
       - ./init:/init:ro
-    # Every Ditto service ready (see x-ditto-service), not just the gateway
-    # answering: the policy PUT needs policies, the connection PUTs need
-    # connectivity.
     depends_on:
-      policies:
-        condition: service_healthy
-      things:
-        condition: service_healthy
-      things-search:
-        condition: service_healthy
-      connectivity:
-        condition: service_healthy
-      gateway:
-        condition: service_healthy
       ditto-nginx:
         condition: service_healthy
       mosquitto:

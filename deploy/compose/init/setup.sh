@@ -32,17 +32,28 @@ put() {
     done
 }
 
-echo "Waiting for Ditto to report UP..."
+# "UP" from the gateway only means every role has a reachable node. Also wait
+# until every node reports ready on its Akka management port: an Up cluster
+# member whose shard regions are registered, so it can serve writes.
+ditto_ready() {
+    curl --silent --fail --max-time 10 -u "$DEVOPS_AUTH" "$DITTO_URL/status/health" \
+        | grep -q '"status" *: *"UP"' || return 1
+    for node in policies things things-search connectivity gateway; do
+        curl --silent --fail --max-time 10 -o /dev/null "http://$node:8558/ready" || return 1
+    done
+}
+
+echo "Waiting for Ditto to be ready..."
 i=0
-until curl --silent --fail -u "$DEVOPS_AUTH" "$DITTO_URL/status/health" | grep -q '"status" *: *"UP"'; do
+until ditto_ready; do
     i=$((i + 1))
     if [ "$i" -ge 90 ]; then
-        echo "Ditto did not become healthy within 7.5 minutes" >&2
+        echo "Ditto did not become ready within 7.5 minutes" >&2
         exit 1
     fi
     sleep 5
 done
-echo "Ditto is UP"
+echo "Ditto is ready"
 
 put "$DITTO_AUTH"  "$DITTO_URL/api/2/policies/default:basic_policy"                  /init/basic-policy.json
 put "$DEVOPS_AUTH" "$DITTO_URL/api/2/connections/mosquitto-source-connection"        /init/mosquitto-source-connection.json
