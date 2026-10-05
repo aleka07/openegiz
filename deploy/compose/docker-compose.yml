@@ -300,6 +300,9 @@ services:
       - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      # Empty unless an example overlay mounts its dashboard in here.
+      - type: tmpfs
+        target: /var/lib/grafana/example-dashboards
     depends_on:
       grafana-plugins:
         condition: service_completed_successfully
