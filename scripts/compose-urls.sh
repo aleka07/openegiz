@@ -14,7 +14,7 @@ OpenEgiz is up.
   Extended API   http://$H:$EXTENDED_API_PORT
   InfluxDB       http://$H:$INFLUXDB_PORT        admin / $INFLUXDB_ADMIN_PASSWORD
   MQTT           tcp://$H:$MQTT_PORT
-  Unity WebGL    http://$H:$UNITY_PORT/build/
+  Unity WebGL    http://$H:$UNITY_PORT/build/<file>   (files from ./build/)
 
 Credentials live in deploy/compose/.env. Check everything with: make smoke
 TXT
