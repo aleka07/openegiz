@@ -15,21 +15,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4
-      - name: Helm lint and render
-        run: |
-          helm lint . -f secrets.values.yaml.example --set grafanaPlugin.publicHost=127.0.0.1
-          helm template opentwins . -n opentwins -f secrets.values.yaml.example \
-            --set grafanaPlugin.publicHost=127.0.0.1 > /dev/null
-      - name: Shell syntax and shellcheck
-        run: |
-          git ls-files '*.sh' | xargs -d '\n' -n1 bash -n
-          git ls-files 'scripts/*.sh' 'deploy/*.sh' | xargs -d '\n' shellcheck --severity=warning
-      - name: Python byte-compile
-        run: git ls-files '*.py' | xargs -d '\n' python3 -m py_compile
-      - name: Compose config is valid
-        run: |
-          bash scripts/compose-env.sh
-          docker compose -f deploy/compose/docker-compose.yml config -q
+      - name: Static checks (same as `make lint`)
+        run: make lint
 
   compose-e2e:
     name: compose e2e (${{ matrix.runner }})

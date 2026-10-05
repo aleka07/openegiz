@@ -125,3 +125,20 @@ unity-demo:
 ## Usage: make copy-build SRC=/path/to/source
 copy-build:
 	@bash scripts/copy-build.sh $(SRC)
+
+# ---------------------------------------------------------------------------
+# Checks
+# ---------------------------------------------------------------------------
+
+## Static checks, same as the CI lint job: run before pushing
+.PHONY: lint
+lint:
+	helm lint . -f secrets.values.yaml.example --set grafanaPlugin.publicHost=127.0.0.1
+	helm template opentwins . -n opentwins -f secrets.values.yaml.example \
+	  --set grafanaPlugin.publicHost=127.0.0.1 > /dev/null
+	git ls-files -z '*.sh' | xargs -0 -n1 bash -n
+	git ls-files -z 'scripts/*.sh' 'deploy/*.sh' | xargs -0 shellcheck --severity=warning
+	git ls-files -z '*.py' | xargs -0 python3 -c 'import ast, sys; [ast.parse(open(f, encoding="utf-8").read(), f) for f in sys.argv[1:]]'
+	@bash scripts/compose-env.sh
+	docker compose -f deploy/compose/docker-compose.yml config -q
+	@echo "lint: ok"
