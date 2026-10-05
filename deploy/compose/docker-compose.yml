@@ -18,16 +18,30 @@ x-ditto-service: &ditto-service
   depends_on:
     mongodb:
       condition: service_healthy
+  # /ready, as in Ditto's Helm chart, not /alive: ready means this node is an
+  # Up member of the cluster and its shard regions are registered, so it can
+  # serve requests. init waits for it. Checks run every 15 s from the start and
+  # the first success counts; the long start_period only matters on a busy
+  # host, where forming the cluster can take minutes.
   healthcheck:
-    test: ["CMD-SHELL", "curl --fail --silent $$(hostname):8558/alive || exit 1"]
+    test: ["CMD-SHELL", "curl --fail --silent $$(hostname):8558/ready || exit 1"]
     interval: 15s
     timeout: 10s
     retries: 8
-    start_period: 120s
+    start_period: 300s
 
 # Upstream Ditto docker settings, plus the header blocklist from the Helm
 # values: without it the HTTP Authorization header (the caller's Basic
 # credentials) is copied into every twin event published on anonymous MQTT.
+#
+# One change from upstream docker: the split brain resolver stays on (Ditto's
+# default, keep-majority) and is enabled at once instead of after Ditto's 1 h
+# delay. When the host stalls (seen: every JVM frozen for 16 s on a busy VM
+# host), Akka can quarantine a cluster connection. A quarantined node stays
+# marked TERMINATED until something downs it; with no downing provider the
+# cluster never heals (things/search roles "not available" for good). The
+# resolver downs it, the node exits (exit-jvm=on), Docker restarts it and it
+# joins again.
 x-ditto-java-options: &ditto-java-options >-
   -XX:ActiveProcessorCount=2 -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport
   -XX:+UseStringDeduplication -Xss512k -XX:MaxRAMPercentage=50 -XX:+UseG1GC
@@ -36,7 +50,7 @@ x-ditto-java-options: &ditto-java-options >-
   -Dakka.cluster.failure-detector.threshold=15.0
   -Dakka.cluster.failure-detector.expected-response-after=10s
   -Dakka.cluster.failure-detector.acceptable-heartbeat-pause=20s
-  -Dakka.cluster.downing-provider-class=
+  -Dditto.cluster.sbr.auto-enable-after=0s
   -Dditto.protocol.blocklist.0=raw-request-uri -Dditto.protocol.blocklist.1=cache-control
   -Dditto.protocol.blocklist.2=connection -Dditto.protocol.blocklist.3=timeout-access
   -Dditto.protocol.blocklist.4=accept-encoding -Dditto.protocol.blocklist.5=x-forwarded-scheme
@@ -216,7 +230,20 @@ services:
       DITTO_DEVOPS_PASSWORD: ${DITTO_DEVOPS_PASSWORD}
     volumes:
       - ./init:/init:ro
+    # Every Ditto service ready (see x-ditto-service), not just the gateway
+    # answering: the policy PUT needs policies, the connection PUTs need
+    # connectivity.
     depends_on:
+      policies:
+        condition: service_healthy
+      things:
+        condition: service_healthy
+      things-search:
+        condition: service_healthy
+      connectivity:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
       ditto-nginx:
         condition: service_healthy
       mosquitto:
