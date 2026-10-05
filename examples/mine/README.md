@@ -20,7 +20,7 @@ make example-mine
 
 This brings up the platform if it is not running, creates the twins, starts the simulator and provisions the dashboard. Open Grafana (the URL and login are printed by `make up`) → **Dashboards → OpenEgiz Examples → Example Mine**. The twins are also listed in the **OpenEgiz** app → **Twins**.
 
-`make example-mine-stop` stops the simulator; the twins and the data stay. `make smoke` checks the example as well when it is running.
+From then on `make down` and `make up` stop and start the mine together with the platform, dashboard included; `make clean` removes it along with all data. `make example-mine-stop` stops the simulator until the next `make up`; the twins and the data stay. `make smoke` checks the example as well when it is running.
 
 ## How the data flows
 

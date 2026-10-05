@@ -3,7 +3,13 @@
 # ---------------------------------------------------------------------------
 # Docker Compose deployment (laptops, CI, contest judges): deploy/compose/
 # ---------------------------------------------------------------------------
-COMPOSE := docker compose -f deploy/compose/docker-compose.yml
+COMPOSE_BASE := docker compose -f deploy/compose/docker-compose.yml
+# Once `make example-mine` has run, every compose command also loads the mine
+# overlay, so `down` stops its simulator and `up` keeps its Grafana dashboard.
+# `make clean` forgets it.
+MINE_MARKER  := deploy/compose/.example-mine
+MINE_COMPOSE := examples/mine/compose.yml
+COMPOSE := $(COMPOSE_BASE)$(if $(wildcard $(MINE_MARKER)), -f $(MINE_COMPOSE))
 
 ## Start the whole platform with Docker Compose (first run: generates credentials)
 up:
@@ -33,17 +39,18 @@ smoke:
 
 ## Run the Example Mine (twins + haul-cycle simulator + Grafana dashboard) on the compose stack
 example-mine: up
-	$(COMPOSE) -f examples/mine/compose.yml up -d --build --wait --wait-timeout 300
-	@echo "Example Mine running: Grafana -> Dashboards -> OpenEgiz -> Example Mine"
+	$(COMPOSE_BASE) -f $(MINE_COMPOSE) up -d --build --wait --wait-timeout 300
+	@touch $(MINE_MARKER)
+	@echo "Example Mine running: Grafana -> Dashboards -> OpenEgiz Examples -> Example Mine"
 
 ## Stop the Example Mine simulator (twins and data stay)
 example-mine-stop:
-	$(COMPOSE) -f examples/mine/compose.yml stop mine-simulator
+	$(COMPOSE_BASE) -f $(MINE_COMPOSE) stop mine-simulator
 
 ## Stop the platform and DELETE all its data and credentials
 clean:
 	$(COMPOSE) down -v --remove-orphans
-	rm -f deploy/compose/.env
+	rm -f deploy/compose/.env $(MINE_MARKER)
 
 # ---------------------------------------------------------------------------
 # Helm deployment (servers): the chart at the repository root

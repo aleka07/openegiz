@@ -19,7 +19,7 @@
 
 ## Быстрый старт (Docker Compose)
 
-**Что нужно:** Docker с Compose v2.20+ (Docker Desktop на macOS/Windows, Docker Engine на Linux), `git`, `make` и **6 ГБ памяти для Docker** (сам стенд занимает около 3,2 ГБ). Работает на amd64 и arm64. На Windows команды выполняются внутри WSL2 — этот вариант пока не проверен.
+**Что нужно:** Docker с Compose v2.20+ (Docker Desktop на macOS/Windows, Docker Engine на Linux), `git`, `make` и **6 ГБ памяти для Docker** (сам стенд занимает около 3,2 ГБ). Работает на amd64 и arm64. В Ubuntu/Debian `make` по умолчанию не установлен: `sudo apt install make`. На Windows всё выполняется внутри WSL2 — сначала [подготовьте Windows](#windows-wsl2).
 
 ```bash
 git clone https://github.com/aleka07/openegiz.git
@@ -47,7 +47,7 @@ make smoke          # сквозная проверка: MQTT -> Ditto -> Telegr
 | Команда | Что делает |
 |---|---|
 | `make up` | Запустить платформу (при первом запуске — сгенерировать пароли в `deploy/compose/.env`) |
-| `make example-mine` | Запустить платформу и Пример рудника |
+| `make example-mine` | Запустить платформу и Пример рудника; после этого `make up` / `make down` поднимают и останавливают рудник вместе с платформой |
 | `make example-mine-stop` | Остановить симулятор рудника; двойники и данные остаются |
 | `make smoke` | Сквозная проверка работающего стенда |
 | `make ps` / `make logs S=<сервис>` | Статус сервисов / логи |
@@ -57,11 +57,37 @@ make smoke          # сквозная проверка: MQTT -> Ditto -> Telegr
 
 Пароли генерируются один раз на каждую копию репозитория и лежат в `deploy/compose/.env` (в git не попадает). Паролей по умолчанию нет. Порты слушают только `127.0.0.1`.
 
+### Windows (WSL2)
+
+OpenEgiz работает внутри Linux-дистрибутива под WSL2, а не в PowerShell. Проверено на Windows 11 24H2 с Docker Desktop 28 и WSL 2.4.
+
+1. Установите [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) с бэкендом WSL 2 и запустите его.
+2. В PowerShell установите Ubuntu 24.04 и сделайте её дистрибутивом WSL по умолчанию:
+
+   ```powershell
+   wsl --update
+   wsl --install -d Ubuntu-24.04
+   wsl --set-default Ubuntu-24.04
+   ```
+
+   Пишите именно `Ubuntu-24.04`: просто `Ubuntu` сейчас ставит 26.04, и в нашем тесте она не запустилась на WSL 2.4. При первом запуске Ubuntu попросит создать пользователя Linux.
+
+   `--set-default` важен: Docker Desktop подключается к дистрибутиву WSL *по умолчанию*, а сразу после установки это его собственный служебный `docker-desktop`. Вместо этого можно включить Ubuntu-24.04 в Docker Desktop → Settings → Resources → WSL integration.
+3. Откройте **Ubuntu 24.04** из меню «Пуск», проверьте, что работает `docker version`, и установите `make`:
+
+   ```bash
+   sudo apt update && sudo apt install -y make
+   ```
+
+4. Дальше — быстрый старт выше, в этом терминале Ubuntu. Клонируйте в домашнюю папку Linux (сначала `cd ~`), а не в `/mnt/c`: файлы на стороне Windows из WSL читаются намного медленнее.
+
 ### Если что-то не так
 
 | Симптом | Что делать |
 |---|---|
 | `Docker is not running` | Запустить Docker Desktop, на Linux — `sudo systemctl start docker` |
+| `make: command not found` | `sudo apt install make` (Ubuntu/Debian) |
+| Windows: `docker: command not found` внутри Ubuntu | Docker Desktop не подключён к этому дистрибутиву: `wsl --set-default Ubuntu-24.04` в PowerShell или Docker Desktop → Settings → Resources → WSL integration. См. [Windows (WSL2)](#windows-wsl2) |
 | `Ports already in use: MQTT_PORT=1883` (или другой) | Порт занят чем-то ещё (часто локальным Mosquitto). Остановите его или поменяйте порт в `deploy/compose/.env` и снова выполните `make up` |
 | Предупреждение `Docker has N GiB of memory`, контейнеры перезапускаются | Дайте Docker 6 ГБ: Docker Desktop → Settings → Resources |
 | `Docker Compose ... is too old` | Обновите Docker; старый `docker-compose` v1 не поддерживается |
