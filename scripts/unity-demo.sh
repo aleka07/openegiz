@@ -19,7 +19,7 @@ while read -r sum asset name; do
     continue
   fi
   echo "  downloading $name"
-  curl -fL --retry 3 -o "$dest.part" "$BASE/$asset"
+  curl -fsSL --retry 3 -o "$dest.part" "$BASE/$asset"
   if [ "$(sha256 "$dest.part")" != "$sum" ]; then
     rm -f "$dest.part"
     echo "error: checksum mismatch for $asset" >&2
