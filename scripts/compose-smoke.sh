@@ -92,5 +92,22 @@ echo "Extended API and Unity"
 check "extended API answers" sh -c "curl -s -o /dev/null -w '%{http_code}' http://$HOST:$EXTENDED_API_PORT/ | grep -qE '^[2-4][0-9][0-9]$'"
 check "Unity build served" curl -sf -o /dev/null "http://$HOST:$UNITY_PORT/build/WebGL%20Build.loader.js"
 
+if "${COMPOSE[@]}" ps -a --format '{{.Service}}' 2>/dev/null | grep -qx mine-setup || \
+   docker ps -a --format '{{.Names}}' | grep -q '^openegiz-mine-simulator-'; then
+  echo "Example Mine"
+  for twin in mine-01 excavator-01 truck-01 truck-02 crusher-01; do
+    check "twin org.openegiz.mine:$twin exists" curl -sf -u "ditto:$DITTO_PASSWORD" "$DITTO/api/2/things/org.openegiz.mine:$twin"
+  done
+  ok=0
+  mine_flux='from(bucket:"default") |> range(start:-2m) |> filter(fn:(r) => r.thingId == "org.openegiz.mine:truck-01" and r._field == "value_route_position_properties_value") |> count()'
+  for _ in $(seq 1 30); do
+    if "${COMPOSE[@]}" exec -T influxdb influx query --org opentwins --token "$INFLUXDB_TOKEN" --raw "$mine_flux" 2>/dev/null \
+        | grep -qE ',[1-9][0-9]*,value_route_position_properties_value,'; then ok=1; break; fi
+    sleep 2
+  done
+  if [ $ok = 1 ]; then pass "simulator telemetry reaches InfluxDB"; else fail "no Example Mine telemetry in InfluxDB for the last 2 minutes"; fi
+  check "dashboard provisioned" curl -sf -u "admin:$GRAFANA_ADMIN_PASSWORD" "$GRAFANA/api/dashboards/uid/openegiz-example-mine"
+fi
+
 echo
 if [ $FAILED = 0 ]; then echo "Smoke test passed."; else echo "Smoke test FAILED."; exit 1; fi

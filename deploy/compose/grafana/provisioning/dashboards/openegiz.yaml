@@ -7,3 +7,10 @@ providers:
     options:
       path: /var/lib/grafana/dashboards
       foldersFromFilesStructure: true
+  # Filled by example overlays (examples/*/compose.yml); empty otherwise.
+  - name: examples
+    folder: OpenEgiz Examples
+    type: file
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/example-dashboards

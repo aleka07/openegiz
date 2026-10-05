@@ -46,6 +46,10 @@ jobs:
         run: make up
       - name: make smoke
         run: make smoke
+      - name: Example Mine on top, smoke again
+        run: |
+          make example-mine
+          make smoke
       - name: Memory actually used
         if: always()
         run: docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}'

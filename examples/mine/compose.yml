@@ -1,0 +1,32 @@
+# Example Mine: an overlay on deploy/compose/docker-compose.yml.
+# Started by `make example-mine` from the repository root.
+
+services:
+  mine-setup:
+    build: ../../examples/mine
+    image: openegiz/example-mine:local
+    restart: "no"
+    command: ["python", "setup_twins.py"]
+    environment:
+      DITTO_URL: http://ditto-nginx:80
+      DITTO_PASSWORD: ${DITTO_PASSWORD}
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+  mine-simulator:
+    build: ../../examples/mine
+    image: openegiz/example-mine:local
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+      SIM_SPEEDUP: ${SIM_SPEEDUP:-10}
+    depends_on:
+      mine-setup:
+        condition: service_completed_successfully
+
+  grafana:
+    volumes:
+      - ../../examples/mine/dashboard.json:/var/lib/grafana/example-dashboards/example-mine.json:ro

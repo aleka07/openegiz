@@ -1,4 +1,4 @@
-.PHONY: up down ps logs smoke clean install uninstall status endpoints upgrade upload-build generate-data copy-build check-secrets check-public-host
+.PHONY: up down ps logs smoke clean example-mine example-mine-stop install uninstall status endpoints upgrade upload-build generate-data copy-build check-secrets check-public-host
 
 # ---------------------------------------------------------------------------
 # Docker Compose deployment (laptops, CI, contest judges): deploy/compose/
@@ -30,6 +30,15 @@ logs:
 ## End-to-end check of the running compose stack
 smoke:
 	@bash scripts/compose-smoke.sh
+
+## Run the Example Mine (twins + haul-cycle simulator + Grafana dashboard) on the compose stack
+example-mine: up
+	$(COMPOSE) -f examples/mine/compose.yml up -d --build --wait --wait-timeout 300
+	@echo "Example Mine running: Grafana -> Dashboards -> OpenEgiz -> Example Mine"
+
+## Stop the Example Mine simulator (twins and data stay)
+example-mine-stop:
+	$(COMPOSE) -f examples/mine/compose.yml stop mine-simulator
 
 ## Stop the platform and DELETE all its data and credentials
 clean:

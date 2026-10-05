@@ -1,0 +1,58 @@
+{
+  "org.openegiz.mine:mine-01": {
+    "policyId": "default:basic_policy",
+    "attributes": {"name": "Example open-pit mine", "_isType": false, "kind": "mine"},
+    "features": {
+      "tonnes_mined": {"properties": {"value": 0, "unit": "t"}},
+      "avg_grade": {"properties": {"value": 0, "unit": "% Cu"}},
+      "trucks_hauling": {"properties": {"value": 0, "unit": "trucks"}}
+    }
+  },
+  "org.openegiz.mine:excavator-01": {
+    "policyId": "default:basic_policy",
+    "attributes": {"name": "Excavator EX-01", "_isType": false, "_parents": "org.openegiz.mine:mine-01",
+                   "kind": "excavator", "bucket_t": 22},
+    "features": {
+      "state": {"properties": {"value": "idle"}},
+      "face_grade": {"properties": {"value": 0, "unit": "% Cu"}},
+      "passes_total": {"properties": {"value": 0, "unit": "passes"}}
+    }
+  },
+  "org.openegiz.mine:truck-01": {
+    "policyId": "default:basic_policy",
+    "attributes": {"name": "Haul truck HT-01", "_isType": false, "_parents": "org.openegiz.mine:mine-01",
+                   "kind": "haul-truck", "capacity_t": 90},
+    "features": {
+      "state": {"properties": {"value": "queued_at_excavator"}},
+      "payload": {"properties": {"value": 0, "unit": "t"}},
+      "speed": {"properties": {"value": 0, "unit": "km/h"}},
+      "route_position": {"properties": {"value": 0, "unit": "km"}},
+      "fuel": {"properties": {"value": 100, "unit": "%"}},
+      "trips_total": {"properties": {"value": 0, "unit": "trips"}}
+    }
+  },
+  "org.openegiz.mine:truck-02": {
+    "policyId": "default:basic_policy",
+    "attributes": {"name": "Haul truck HT-02", "_isType": false, "_parents": "org.openegiz.mine:mine-01",
+                   "kind": "haul-truck", "capacity_t": 90},
+    "features": {
+      "state": {"properties": {"value": "queued_at_excavator"}},
+      "payload": {"properties": {"value": 0, "unit": "t"}},
+      "speed": {"properties": {"value": 0, "unit": "km/h"}},
+      "route_position": {"properties": {"value": 0, "unit": "km"}},
+      "fuel": {"properties": {"value": 100, "unit": "%"}},
+      "trips_total": {"properties": {"value": 0, "unit": "trips"}}
+    }
+  },
+  "org.openegiz.mine:crusher-01": {
+    "policyId": "default:basic_policy",
+    "attributes": {"name": "Primary crusher CR-01", "_isType": false, "_parents": "org.openegiz.mine:mine-01",
+                   "kind": "crusher", "rated_tph": 800},
+    "features": {
+      "state": {"properties": {"value": "idle"}},
+      "throughput": {"properties": {"value": 0, "unit": "t/h"}},
+      "feed_grade": {"properties": {"value": 0, "unit": "% Cu"}},
+      "tonnes_total": {"properties": {"value": 0, "unit": "t"}}
+    }
+  }
+}
