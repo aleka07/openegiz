@@ -105,9 +105,10 @@ endpoints:
 upload-build:
 	@bash scripts/upload-build.sh $(RELEASE_NAME)
 
-## Run the data generator for oven twins
+## Oven demo: create the oven twins, then stream telemetry (Ctrl+C to stop).
+## Compose by default; Helm: make generate-data MQTT_PORT=30511 DITTO_URL=http://localhost:30525 DITTO_PASSWORD=...
 generate-data:
-	@bash -c 'source data-generator/venv/bin/activate && python3 data-generator/data_generator.py'
+	@bash scripts/demo-oven.sh
 
 ## Copy 4 Unity WebGL build files from SRC into ./build/
 ## Usage: make copy-build SRC=/path/to/source

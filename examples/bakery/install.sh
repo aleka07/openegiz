@@ -4,16 +4,17 @@
 #
 # Run this from a LAPTOP that has ssh access to the host.
 #
-#   bash data-generator/bakery/install.sh                 # rsync + create twins
-#   bash data-generator/bakery/install.sh --no-twins      # rsync only
-#   HOST=vpn-gx10-11 REMOTE_DIR=course/bakery bash install.sh
+#   HOST=<ssh-host> bash examples/bakery/install.sh              # rsync + create twins
+#   HOST=<ssh-host> bash examples/bakery/install.sh --no-twins   # rsync only
+#   HOST=<ssh-host> REMOTE_DIR=course/bakery bash examples/bakery/install.sh
 #
-# The host already has a venv with paho-mqtt at ~/course/venv.
+# The host needs a venv with paho-mqtt at ~/course/venv
+# (bootstrap.sh --with-course-tools creates it).
 
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOST="${HOST:-vpn-gx10-11}"
+HOST="${HOST:?set HOST to the ssh host that runs OpenEgiz, e.g. HOST=my-server}"
 REMOTE_DIR="${REMOTE_DIR:-course/bakery}"
 CREATE_TWINS=1
 [[ "${1:-}" == "--no-twins" ]] && CREATE_TWINS=0

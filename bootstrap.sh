@@ -32,7 +32,7 @@
 #
 #  Optional (default OFF):
 #      --with-course-tools   pm4py venv + JaamSim   (docs/notes-course-tools.md)
-#      --with-bakery         bakery twins in Ditto  (data-generator/bakery/)
+#      --with-bakery         bakery twins in Ditto  (examples/bakery/)
 #
 #  Hermes is NOT installed here — the owner installs it manually. A pointer to
 #  integrations/hermes/install.sh is printed at the end.
@@ -534,9 +534,9 @@ if [ "$WITH_COURSE_TOOLS" = 1 ]; then
     || die "pip self-upgrade failed." "See docs/notes-course-tools.md"
 
   # requirements.txt lives on the host in ~/course; fall back to the repo's
-  # data-generator requirements, which cover the MQTT/Influx client side.
+  # examples requirements, which cover the MQTT/Influx client side.
   req=""
-  for cand in "$COURSE_DIR/requirements.txt" "$CHART_DIR/data-generator/requirements.txt"; do
+  for cand in "$COURSE_DIR/requirements.txt" "$CHART_DIR/examples/requirements.txt"; do
     [ -f "$cand" ] && { req="$cand"; break; }
   done
   if [ -n "$req" ]; then
@@ -581,7 +581,7 @@ fi
 # =============================================================================
 if [ "$WITH_BAKERY" = 1 ]; then
   step "Optional — bakery twins"
-  twins_script="$CHART_DIR/data-generator/bakery/create_twins.sh"
+  twins_script="$CHART_DIR/examples/bakery/create_twins.sh"
   if [ ! -f "$twins_script" ]; then
     warn "not found: $twins_script — skipping"
   else
@@ -591,11 +591,11 @@ if [ "$WITH_BAKERY" = 1 ]; then
     SECRETS_FILE="$SECRETS_FILE" bash "$twins_script" \
       || die "create_twins.sh failed." \
              "It needs a reachable Ditto on \$DITTO_URL (default http://localhost:30525)." \
-             "See data-generator/bakery/README.md"
+             "See examples/bakery/README.md"
     ok "bakery twins created/updated in Ditto"
     info ""
     info "Run a shift (the simulator needs the course venv, not the system python3):"
-    info "    ~/course/venv/bin/python $CHART_DIR/data-generator/bakery/simulator.py --batches 20 --speedup 200"
+    info "    ~/course/venv/bin/python $CHART_DIR/examples/bakery/simulator.py --batches 20 --speedup 200"
     info "Full scenario: docs/runbook-bakery-scenario.md"
   fi
 fi

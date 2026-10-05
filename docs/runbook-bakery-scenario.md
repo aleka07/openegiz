@@ -544,5 +544,5 @@ hermes -z "Прогони все три модели BakeryLine в JaamSim, ср
 | `~/.hermes/skills/openegiz/` | скиллы агента: `pm4py-mining`, `jaamsim` |
 | `~/course/CREDENTIALS.md` | пароли (только на хосте) |
 
-В репозитории те же файлы лежат в `data-generator/bakery/` и
+В репозитории те же файлы лежат в `examples/bakery/` и
 `integrations/hermes/skills/`; хост — это копия, источник правды — репозиторий.
