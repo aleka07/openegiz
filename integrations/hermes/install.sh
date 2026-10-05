@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy the OpenEgiz <-> Hermes integration ON THE HOST (gx10-11).
+# Deploy the OpenEgiz <-> Hermes integration ON THE HOST that runs OpenEgiz (Helm).
 #
 # Idempotent: safe to re-run after every rsync of this directory.
 #

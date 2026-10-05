@@ -314,7 +314,7 @@ telegraf:
 
 # OpenEgiz course scenario: the virtual bakery line
 ##################################################################
-# The bakery simulator (data-generator/bakery/) emits two streams. Telemetry
+# The bakery simulator (examples/bakery/) emits two streams. Telemetry
 # takes the normal Ditto path and needs nothing here. The process EVENT LOG
 # bypasses Ditto — an event is a fact about the process, not a device state —
 # so Telegraf needs a second mqtt_consumer to land it in its own measurement,

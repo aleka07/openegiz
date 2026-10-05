@@ -1,0 +1,70 @@
+{
+  "org.openegiz:oven-01": {
+    "policyId": "default:basic_policy",
+    "attributes": {
+      "name": "Industrial oven 1",
+      "_isType": false,
+      "kind": "oven"
+    },
+    "features": {
+      "voltage_v": {
+        "properties": {
+          "value": 0,
+          "unit": "V"
+        }
+      },
+      "current_a": {
+        "properties": {
+          "value": 0,
+          "unit": "A"
+        }
+      },
+      "active_power_kw": {
+        "properties": {
+          "value": 0,
+          "unit": "kW"
+        }
+      },
+      "power_factor": {
+        "properties": {
+          "value": 0,
+          "unit": ""
+        }
+      }
+    }
+  },
+  "org.openegiz:oven-02": {
+    "policyId": "default:basic_policy",
+    "attributes": {
+      "name": "Industrial oven 2",
+      "_isType": false,
+      "kind": "oven"
+    },
+    "features": {
+      "voltage_v": {
+        "properties": {
+          "value": 0,
+          "unit": "V"
+        }
+      },
+      "current_a": {
+        "properties": {
+          "value": 0,
+          "unit": "A"
+        }
+      },
+      "active_power_kw": {
+        "properties": {
+          "value": 0,
+          "unit": "kW"
+        }
+      },
+      "power_factor": {
+        "properties": {
+          "value": 0,
+          "unit": ""
+        }
+      }
+    }
+  }
+}

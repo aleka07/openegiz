@@ -15,22 +15,21 @@
 ## Установка
 
 ```bash
-cd data-generator
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+python3 -m venv examples/.venv
+source examples/.venv/bin/activate
+pip install -r examples/requirements.txt
 ```
 
 ## Запуск
 
 ```bash
-source data-generator/venv/bin/activate
-python3 data-generator/lightbulb_generator.py
+source examples/.venv/bin/activate
+python3 examples/lightbulb/lightbulb_generator.py
 ```
 
 С другим интервалом:
 ```bash
-python3 data-generator/lightbulb_generator.py --interval 2
+python3 examples/lightbulb/lightbulb_generator.py --interval 2
 ```
 
 Остановить: `Ctrl+C`
@@ -40,19 +39,19 @@ python3 data-generator/lightbulb_generator.py --interval 2
 Чтобы терминал не был занят:
 
 ```bash
-python3 data-generator/lightbulb_generator.py --daemon
+python3 examples/lightbulb/lightbulb_generator.py --daemon
 ```
 
-Логи пишутся в `data-generator/lightbulb_generator.log`.
+Логи пишутся в `examples/lightbulb/lightbulb_generator.log`.
 
 Остановить фоновый процесс:
 ```bash
-python3 data-generator/lightbulb_generator.py --stop
+python3 examples/lightbulb/lightbulb_generator.py --stop
 ```
 
 Посмотреть логи в реальном времени:
 ```bash
-tail -f data-generator/lightbulb_generator.log
+tail -f examples/lightbulb/lightbulb_generator.log
 ```
 
 ## Управление состоянием (on/off)

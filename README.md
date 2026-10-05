@@ -48,7 +48,7 @@ $EDITOR ~/openegiz-deploy/secrets.values.yaml   # replace every CHANGE_ME
 bash bootstrap.sh
 ```
 
-Optional extras, both off by default: `--with-course-tools` (pm4py venv + JaamSim, see [docs/notes-course-tools.md](docs/notes-course-tools.md)) and `--with-bakery` (the bakery twins from [data-generator/bakery/](data-generator/bakery/)). Hermes is installed separately — [integrations/hermes/install.sh](integrations/hermes/install.sh).
+Optional extras, both off by default: `--with-course-tools` (pm4py venv + JaamSim, see [docs/notes-course-tools.md](docs/notes-course-tools.md)) and `--with-bakery` (the bakery twins from [examples/bakery/](examples/bakery/)). Hermes is installed separately — [integrations/hermes/install.sh](integrations/hermes/install.sh).
 
 > [!IMPORTANT]
 > `values.yaml` ships deliberately **invalid** placeholders for every credential. [`secrets.values.yaml.example`](secrets.values.yaml.example) lists the nine keys a fresh install needs; the filled-in copy lives at `~/openegiz-deploy/secrets.values.yaml` (chmod 600) and is never committed. Every helm command must be given it with `-f`.
@@ -122,7 +122,7 @@ Data flows MQTT → Ditto (twin state) → MQTT → Telegraf → InfluxDB → Gr
 | `templates/` | Platform glue: extended API, MongoDB, secrets, post-install connection jobs, Telegraf config |
 | `vendor/grafana-plugins/` | Vendored + rebranded Grafana plugins, originals, repatch script |
 | `rebuild/extended-api/` | Reproducible arm64 build of the Ditto extended API image |
-| `data-generator/` | Python telemetry generators (MQTT) |
+| `examples/` | Example Mine (`examples/mine`) and older demos: bakery, oven, light bulb, AR lamp, solar |
 | `build/` | Unity WebGL build served by the nginx pod |
 | `docs/` | Installation journal, ARM64 image audit, working notes |
 

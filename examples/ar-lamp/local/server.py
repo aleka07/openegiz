@@ -13,9 +13,7 @@ DITTO_FEATURES_URL = "http://localhost:30525/api/2/things/summerschool:lightbulb
 DITTO_AUTH = base64.b64encode(b"ditto:ditto").decode("ascii")
 
 ALIASES = {
-    "/": "lampa (1).html",
-    "/lampa.obj": "lampa (1).obj",
-    "/lampa.patt": "lampa (1).patt",
+    "/": "lampa.html",
 }
 
 

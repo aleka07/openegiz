@@ -42,7 +42,7 @@ def main():
                     print(f"FAILED   {thing_id}: {exc}", file=sys.stderr)
                     return 1
                 time.sleep(3)
-    print(f"{len(twins)} Example Mine twins ready in {DITTO_URL}")
+    print(f"{len(twins)} twins ready in {DITTO_URL}")
     return 0
 
 

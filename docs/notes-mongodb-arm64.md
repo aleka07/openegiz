@@ -26,7 +26,7 @@ port `27017`:
 | NodePort exposure | `values.yaml:396-398` (before the change) | bitnami service `type: NodePort`, `nodePorts.mongodb: 30717` |
 | Chart dependency | `requirements.yaml:9-15` | `condition: mongodb.enabled` |
 
-Not consumers: Grafana (no Mongo datasource, it reads InfluxDB), `data-generator/`,
+Not consumers: Grafana (no Mongo datasource, it reads InfluxDB), `examples/`,
 `post-install/` scripts, `scripts/`. Hono's own vendored MongoDB
 (`charts/hono/Chart.yaml:12`, `condition: mongodb.createInstance`) stays off,
 `charts/hono/values.yaml:1425` defaults `createInstance: false`.

@@ -63,8 +63,8 @@ Namespace `bakery`, политика `default:basic_policy` (та же, что �
 С ноутбука (rsync на хост + создание двойников в Ditto):
 
 ```bash
-bash data-generator/bakery/install.sh              # rsync + двойники
-bash data-generator/bakery/install.sh --no-twins   # только rsync
+HOST=<ssh-хост> bash examples/bakery/install.sh              # rsync + двойники
+HOST=<ssh-хост> bash examples/bakery/install.sh --no-twins   # только rsync
 ```
 
 Скрипт кладёт файлы в `~/course/bakery/` на хосте. Пароль Ditto берётся на
@@ -75,7 +75,7 @@ bash data-generator/bakery/install.sh --no-twins   # только rsync
 обнуляются):
 
 ```bash
-ssh vpn-gx10-11 'bash ~/course/bakery/create_twins.sh'
+ssh <ssh-хост> 'bash ~/course/bakery/create_twins.sh'
 ```
 
 ## Запуск

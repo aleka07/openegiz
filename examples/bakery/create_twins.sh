@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Create (or re-create) the five bakery twins in Eclipse Ditto.
 #
-# Run this ON THE HOST (gx10-11). Credentials are never stored in this repo:
+# Run this ON THE HOST that runs OpenEgiz (Helm). Credentials are never stored in this repo:
 # the script reads the Ditto password from the helm secrets override, or from
 # $DITTO_PASSWORD if you export it yourself.
 #

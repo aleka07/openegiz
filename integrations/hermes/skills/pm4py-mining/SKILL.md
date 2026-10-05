@@ -161,7 +161,7 @@ result is ground truth. Two defensible derivations:
                                 timestamp_key="time:timestamp")
    ```
 
-2. **Use a real event log instead** — the repo's `data-generator/` produces
+2. **Use a real event log instead** — the repo's `examples/bakery/` produces
    process-shaped data, and any CSV/XES the user supplies is read directly:
 
    ```python
