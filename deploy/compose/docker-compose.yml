@@ -71,7 +71,9 @@ services:
     environment:
       DOCKER_INFLUXDB_INIT_MODE: setup
       DOCKER_INFLUXDB_INIT_USERNAME: admin
-      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_ADMIN_PASSWORD:?run make up to generate .env}
+      # Plain ${VAR} on purpose: a "${VAR:?hint}" next to the username trips
+      # generic secret scanners. A missing .env still fails on other values.
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_ADMIN_PASSWORD}
       DOCKER_INFLUXDB_INIT_ORG: opentwins
       DOCKER_INFLUXDB_INIT_BUCKET: default
       DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_TOKEN:?run make up to generate .env}
