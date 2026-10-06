@@ -2,7 +2,7 @@
 
 *Русская версия: [README.ru.md](README.ru.md)*
 
-The smallest digital mine that exercises every part of OpenEgiz. It is the reference starting point for contest submissions and our own end-to-end test of the platform.
+The smallest digital mine that exercises every part of OpenEgiz: a sample of how a digital mine is built on the platform, and our own end-to-end test of it. For the contest it is an illustration, not a starting point: build a mine of your own. Parts of this example used unchanged earn no points.
 
 ```text
 excavator-01 ──loads──▶ truck-01, truck-02 ──haul 3.2 km──▶ crusher-01
@@ -52,4 +52,4 @@ Every equipment twin carries `attributes._parents = org.openegiz.mine:mine-01`, 
 
 ## What it deliberately leaves out
 
-Grade is a random walk, speeds are constant with noise, there is one road and no blasting, drilling, dispatch optimisation, maintenance, ventilation, safety or energy model. These are exactly the directions the contest's mine map invites you to build.
+Grade is a random walk, speeds are constant with noise, there is one road and no blasting, drilling, dispatch optimisation, maintenance, ventilation, safety or energy model. The contest's mine map lists these directions: build them into a mine of your own.
