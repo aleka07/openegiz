@@ -1,8 +1,8 @@
 # OpenEgiz — Docker Compose deployment.
 #
 # Same components and wiring as the Helm chart at the repository root, sized
-# for a laptop: every Ditto service gets the 512m-768m limits used by Eclipse
-# Ditto's own docker deployment instead of the chart's 2 GiB.
+# for a laptop: the Ditto services get 768m-896m instead of the chart's 2 GiB
+# (see "Ditto memory" below).
 #
 # Start it with `make up` from the repository root: that generates .env with
 # random credentials on first run, then calls `docker compose up`.
@@ -43,9 +43,24 @@ x-ditto-service: &ditto-service
 # - So that a stall alone does not down anyone: a node counts as unreachable
 #   only after 60 s without heartbeats (upstream 20 s), and the resolver does
 #   not down everything when reachability keeps changing.
+#
+# Ditto memory: the heap is a fixed -Xmx per service (JVM_CMD_ARGS_ENV, the
+# images' hook for extra java arguments), not a share of the container limit.
+# - Upstream docker gives each JVM half of a 512m limit as heap. A Ditto JVM
+#   needs about 300 MiB besides the heap, and more as the JIT compiles more
+#   code (metaspace ~90, JIT code 35-55, GC ~50, symbols and classes ~50,
+#   threads and compiler arenas), so once the heap had grown under sustained
+#   telemetry the kernel killed the JVM at the limit (exit 137,
+#   OOMKilled=false), 5-60 minutes into a run, and again after every restart.
+#   Same heaps as before; every limit is now heap + 512 MiB. `make smoke`
+#   checks that margin.
+# - JDK 17.0.8 in the Ditto 3.3.7 images cannot read the container limit on
+#   kernels without the cgroup v1 memory controller (Docker Desktop's 6.12
+#   kernel): a percentage then means a share of all of Docker's memory, and
+#   every JVM was killed within minutes. -Xmx does not depend on that.
 x-ditto-java-options: &ditto-java-options >-
   -XX:ActiveProcessorCount=2 -XX:+ExitOnOutOfMemoryError -XX:+UseContainerSupport
-  -XX:+UseStringDeduplication -Xss512k -XX:MaxRAMPercentage=50 -XX:+UseG1GC
+  -XX:+UseStringDeduplication -Xss512k -XX:+UseG1GC
   -XX:MaxGCPauseMillis=150 -Dakka.coordinated-shutdown.exit-jvm=on
   -Dakka.cluster.shutdown-after-unsuccessful-join-seed-nodes=180s
   -Dakka.cluster.failure-detector.threshold=15.0
@@ -147,8 +162,9 @@ services:
   policies:
     <<: *ditto-service
     image: docker.io/eclipse/ditto-policies:${DITTO_VERSION:-3.3.7}
-    mem_limit: 512m
+    mem_limit: 768m
     environment:
+      JVM_CMD_ARGS_ENV: -Xmx256m
       TZ: UTC
       BIND_HOSTNAME: 0.0.0.0
       MONGO_DB_HOSTNAME: mongodb
@@ -157,8 +173,9 @@ services:
   things:
     <<: *ditto-service
     image: docker.io/eclipse/ditto-things:${DITTO_VERSION:-3.3.7}
-    mem_limit: 512m
+    mem_limit: 768m
     environment:
+      JVM_CMD_ARGS_ENV: -Xmx256m
       TZ: UTC
       BIND_HOSTNAME: 0.0.0.0
       MONGO_DB_HOSTNAME: mongodb
@@ -167,8 +184,9 @@ services:
   things-search:
     <<: *ditto-service
     image: docker.io/eclipse/ditto-things-search:${DITTO_VERSION:-3.3.7}
-    mem_limit: 512m
+    mem_limit: 768m
     environment:
+      JVM_CMD_ARGS_ENV: -Xmx256m
       TZ: UTC
       BIND_HOSTNAME: 0.0.0.0
       MONGO_DB_HOSTNAME: mongodb
@@ -177,8 +195,9 @@ services:
   connectivity:
     <<: *ditto-service
     image: docker.io/eclipse/ditto-connectivity:${DITTO_VERSION:-3.3.7}
-    mem_limit: 768m
+    mem_limit: 896m
     environment:
+      JVM_CMD_ARGS_ENV: -Xmx384m
       TZ: UTC
       BIND_HOSTNAME: 0.0.0.0
       MONGO_DB_HOSTNAME: mongodb
@@ -187,8 +206,9 @@ services:
   gateway:
     <<: *ditto-service
     image: docker.io/eclipse/ditto-gateway:${DITTO_VERSION:-3.3.7}
-    mem_limit: 512m
+    mem_limit: 768m
     environment:
+      JVM_CMD_ARGS_ENV: -Xmx256m
       TZ: UTC
       BIND_HOSTNAME: 0.0.0.0
       ENABLE_PRE_AUTHENTICATION: "true"
