@@ -19,7 +19,7 @@ Based on [OpenTwins](https://github.com/ertis-research/opentwins) by ERTIS Resea
 
 ## Quick start (Docker Compose)
 
-**You need:** Docker with Compose v2.20+ (Docker Desktop on macOS/Windows, Docker Engine on Linux), `git`, `make`, and **6 GB of memory for Docker** (the stack uses about 3.2 GB). amd64 and arm64 both work. On Ubuntu/Debian, `make` is not installed by default: `sudo apt install make`. On Windows, run everything inside WSL2 — first do the [Windows setup](#windows-wsl2).
+**You need:** Docker with Compose v2.20+ (Docker Desktop on macOS/Windows, Docker Engine on Linux), `git`, `make`, and **6 GB of memory for Docker** (the stack uses about 3.5 GB under sustained telemetry). amd64 and arm64 both work. On Ubuntu/Debian, `make` is not installed by default: `sudo apt install make`. On Windows, run everything inside WSL2 — first do the [Windows setup](#windows-wsl2).
 
 ```bash
 git clone https://github.com/aleka07/openegiz.git

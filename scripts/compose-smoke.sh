@@ -54,6 +54,33 @@ done
 check_ditto "create test twin" curl -sf -u "ditto:$DITTO_PASSWORD" -X PUT -H 'Content-Type: application/json' \
   -d '{"policyId":"default:basic_policy","features":{"smoke":{"properties":{"value":0}}}}' "$DITTO/api/2/things/$THING"
 
+# Each Ditto JVM needs about 300 MiB besides its heap (metaspace, JIT code, GC
+# structures, threads), more as it runs; the compose file gives it 512. With
+# less room the kernel kills the JVM once the heap has grown under load,
+# 5-60 minutes into a run (docker reports exit 137 and OOMKilled=false). The heap size comes from the JVM itself, so
+# this also catches a JVM that cannot see its container limit and sizes the
+# heap from the host's memory (JDK 17.0.8 on kernels without the cgroup v1
+# memory controller, such as the 6.12 kernel of recent Docker Desktop).
+echo "Ditto memory"
+for svc in policies things things-search connectivity gateway; do
+  heap="" limit=""
+  for _ in 1 2 3; do
+    heap=$("${COMPOSE[@]}" exec -T "$svc" curl -s -m 5 localhost:9095/ 2>/dev/null \
+      | awk '/^jvm_memory_max_bytes\{region="heap"/ {printf "%d", $2 / 1048576}') || true
+    [ -n "$heap" ] && break
+    sleep 3
+  done
+  limit=$("${COMPOSE[@]}" exec -T "$svc" sh -c 'cat /sys/fs/cgroup/memory.max 2>/dev/null || cat /sys/fs/cgroup/memory/memory.limit_in_bytes' 2>/dev/null \
+    | awk '/^[0-9]+$/ {printf "%d", $1 / 1048576}') || true
+  if [ -z "$heap" ] || [ -z "$limit" ]; then
+    fail "$svc: could not read max heap (${heap:-?} MiB) or container limit (${limit:-?} MiB)"
+  elif [ $((limit - heap)) -ge 512 ]; then
+    pass "$svc: max heap ${heap} MiB leaves $((limit - heap)) MiB of its ${limit} MiB limit"
+  else
+    fail "$svc: max heap ${heap} MiB leaves $((limit - heap)) MiB of its ${limit} MiB limit (need 512)"
+  fi
+done
+
 echo "Telemetry loop"
 value=$((RANDOM % 1000 + 1))
 msg=$(printf '{"topic":"%s/%s/things/twin/commands/modify","path":"/features/smoke/properties/value","value":%s}' \
